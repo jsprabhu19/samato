@@ -4,6 +4,8 @@
 
 This document is the **operator's manual**. The INTERVIEW-NOTES files in each service are the *designer notes*; this is the *getting-it-running* doc.
 
+**Status (2026-07-07):** the full reactor now compiles and packages — `mvn -B -DskipTests package` returns **BUILD SUCCESS** for all 12 modules (9 services + parent + 2 shared libs). The build is verified; the runtime walkthrough below is not yet run end-to-end on this machine (see section 9).
+
 The bible has 9 Spring Boot services backed by PostgreSQL, Kafka, Redis, OpenSearch, Eureka, Config Server, and an API Gateway. This guide takes you from a fresh checkout to "I just placed an order and the saga completed" in roughly 15–30 minutes, depending on Docker image pulls.
 
 ---
@@ -22,17 +24,19 @@ If you have anything below 21, install Temurin 21 from https://adoptium.net/temu
 
 ### 0.2 Maven 3.9+
 
-> **Important:** The Maven shipped with most systems (3.3.9, 3.6.x) is too old for Spring Boot 3.3.4. Bump it first or you'll see `Maven 3.x is not supported by Spring Boot 3.x` errors.
+> **Important:** The Maven shipped with most systems (3.3.9, 3.6.x) is too old for Spring Boot 3.3.4. Bump it first or you'll see `requires Maven version 3.6.3` errors from `maven-compiler-plugin`.
 
-1. Download: https://maven.apache.org/download.cgi → **3.9.9** (binary zip)
-2. Unzip to `C:\tools\maven`
-3. Add `C:\tools\maven\bin` to your PATH (System Properties → Environment Variables)
-4. Verify:
+1. Download: https://maven.apache.org/download.cgi → **3.9.x** (binary zip)
+2. Unzip somewhere on your disk — e.g. `E:\SW\apache-maven-3.9.16`
+3. **Either** add `<unzip-dir>\bin` to your PATH, **or** invoke it by full path. The full-path form is what this guide uses, so the commands below work even if your `mvn` is still the old one:
    ```powershell
-   mvn -version
-   # Apache Maven 3.9.9
+   E:\SW\apache-maven-3.9.16\bin\mvn -version
+   # Apache Maven 3.9.16
    # Java version: 21.x
    ```
+4. From here on, every `mvn` command in this doc is written for the new Maven. If you put it on the PATH first, drop the `E:\SW\apache-maven-3.9.16\bin\` prefix.
+
+> **Heads up — what the rest of the doc assumes:** the new Maven lives at `E:\SW\apache-maven-3.9.16\bin\mvn`. If yours is elsewhere, substitute that path. The commands below all use the absolute path so they work out-of-the-box.
 
 ### 0.3 Docker Desktop
 
@@ -57,25 +61,53 @@ For everything below section 5, the placeholders in `application.yml` work — R
 
 ## 1. First compile (the most important step)
 
-Before touching Docker, prove the code at least compiles. **Expect 5–30 small errors** (missing imports, wrong SDK method names, signature mismatches). Fix them as you go; the patterns should match the existing order-service.
+Before touching Docker, prove the code at least compiles. **The full reactor now builds cleanly** — see the verified command in section 1.1. If you've never run the build before, expect the Maven plugin to download ~500 MB of dependencies on the first call (Avro, Confluent, OpenSearch, etc.) and then succeed in 10–20 s on subsequent calls.
 
-### 1.1 Compile from the project root
+### 1.1 Build the whole reactor (verified)
 
 ```powershell
 cd E:\Learning\ollama-projects\springboot-app\samato
-mvn -B -DskipTests compile
+E:\SW\apache-maven-3.9.16\bin\mvn -B -DskipTests package
 ```
 
-Read the errors top to bottom. Do not try to fix all 30 at once — fix the topmost, recompile, repeat.
+Expected final lines (with no `BUILD FAILURE`):
 
-### 1.2 Compile individual services if the root fails
+```
+[INFO] Samato — Microservice Reference Bible  SUCCESS
+[INFO] Shared Library .......................... SUCCESS
+[INFO] Shared Kafka Library .................... SUCCESS
+[INFO] Config Service .......................... SUCCESS
+[INFO] Discovery Service ....................... SUCCESS
+[INFO] API Gateway ............................. SUCCESS
+[INFO] Auth Service ............................ SUCCESS
+[INFO] User Service ............................ SUCCESS
+[INFO] Restaurant Service ...................... SUCCESS
+[INFO] Search Service .......................... SUCCESS
+[INFO] Order Service ........................... SUCCESS
+[INFO] Samato — Payment Service ................ SUCCESS
+[INFO] BUILD SUCCESS
+```
+
+That command produces a Spring Boot fat JAR for every service under `services/*/target/*.jar`.
+
+### 1.2 Faster builds while iterating
+
+Use `-am` ("also-make") when you only want to work on one service and its upstream deps:
 
 ```powershell
-mvn -B -pl services/payment-service -am -DskipTests compile
-mvn -B -pl services/order-service   -am -DskipTests compile
+E:\SW\apache-maven-3.9.16\bin\mvn -B -pl services/payment-service -am -DskipTests package
+E:\SW\apache-maven-3.9.16\bin\mvn -B -pl services/order-service   -am -DskipTests package
 ```
 
-The `-am` ("also-make") flag builds upstream modules (`shared`, `shared-kafka`) first.
+`shared` and `shared-kafka` build first as transitive deps.
+
+To re-build one service without rebuilding the world, drop `-am`:
+
+```powershell
+E:\SW\apache-maven-3.9.16\bin\mvn -B -pl services/payment-service -DskipTests package
+```
+
+(useful when shared libs haven't changed but you want to confirm a payment-service fix still compiles).
 
 ### 1.3 Skip tests for now
 
@@ -83,55 +115,57 @@ The `-am` ("also-make") flag builds upstream modules (`shared`, `shared-kafka`) 
 -DskipTests
 ```
 
-Tests will fail because of missing test infrastructure (Testcontainers, etc.). Get the main code compiling first.
+Tests are mostly Testcontainers-based and need Docker running with the right images. Get the main code building first; run tests after section 3 brings up the infra.
 
-### 1.4 Common errors and fixes
+### 1.4 If you see a new error (unlikely)
 
-| Error pattern | Fix |
-|---|---|
-| `cannot find symbol: class Utils` in `RazorpayClientImpl` | The SDK version in `payment-service/pom.xml` is wrong. Try `1.4.5` or the latest. |
-| `package io.hypersistence.utils.hibernate.type.json does not exist` | Add the dep to `payment-service/pom.xml` (artifactId `hypersistence-utils-hibernate-63`, version `3.7.7`). If your Hibernate version differs, change to `hibernate-60` / `hibernate-62`. |
-| `Optional<Payment> cannot be converted to Payment` in some call site | Use `.orElseThrow(...)` at the call site. |
-| `@Lazy` self-injection failure in `SagaEngine` | The pattern is fine — just make sure `SagaEngine` is the only `@Service` of that type. |
-| Native query returns no rows | See section 2.3 below. |
-| Spring Cloud version mismatch | Use `2023.0.3` (matches the plan). |
+The build was a known-broken state before this guide was written. A sweep of fixes is now committed (see section 1.5). If a new error appears on your machine, it's almost certainly one of:
+
+| Error pattern | Cause | Fix |
+|---|---|---|
+| `requires Maven version 3.6.3` from `maven-compiler-plugin` | Old Maven (3.3.x, 3.6.x) on PATH | Use Maven 3.9.x — see section 0.2 |
+| `Non-resolvable parent POM for com.samato:shared` | The `shared/pom.xml` `relativePath` is wrong | Should be `<relativePath>../pom.xml</relativePath>` (one level up, not two) |
+| `Could not resolve dependencies: io.confluent:kafka-avro-serializer` | Maven Central doesn't host the Confluent artifacts | Make sure the root `pom.xml` has the `https://packages.confluent.io/maven/` repository block (it does) |
+| `cannot find symbol: class Razorpay` in `RazorpayClientImpl` | The SDK class is `RazorpayClient`, not `Razorpay` | Use `com.razorpay.RazorpayClient` (fully qualified if your class also imports a same-named type) |
+| `cannot infer type arguments for SpecificDatumReader<>` in `AvroBytes` | The registry value `Class<? extends SpecificRecord>` is too narrow for Avro's `SpecificDatumReader` constructor | Cast to raw `Class` and add `@SuppressWarnings({"unchecked", "rawtypes"})` |
+| `boolean cannot be dereferenced` on `client.indices().exists(...).isExists()` | OpenSearch 2.x returns `boolean` directly from `exists()` | Drop the `.isExists()` call |
+
+### 1.5 What was fixed (changelog of the build session)
+
+The build went from "30 errors expected" to "BUILD SUCCESS" in one session. The fixes are committed as `876b497 fix: make mvn package succeed across all 12 modules` on `main`. Highlights:
+
+- **Maven 3.9.x required** — the system Maven 3.3.9 in the dev environment is too old; use 3.9.16 (or any 3.9.x).
+- **Confluent repo added** to root `pom.xml` for `io.confluent:kafka-avro-serializer:7.6.1` (not on Maven Central).
+- **Sealed `PaymentEvent` / `PaymentCommand`** had a `permits` clause listing nested records by simple name — that only works inside one compilation unit. Dropped the redundant clause; callers now use `PaymentEvent.RazorpayOrderCreated` etc.
+- **`DomainEvent` demoted to a marker interface.** Avro's code generator can't make generated classes implement a custom Java interface, so the abstract `getEventId` / `getAggregateId` methods on `DomainEvent` were unreachable. Switched the `KafkaTemplate<String, DomainEvent>` to `KafkaTemplate<String, SpecificRecord>`; consumers read `eventId` through `GenericRecord.get("eventId")`.
+- **`Razorpay` → `RazorpayClient`** in `payment-service`. The SDK class is `com.razorpay.RazorpayClient`, and the resource fields are lowercase: `razorpay.orders.create(...)` and `razorpay.payments.refund(...)` (not `.Orders` / `.Payments`).
+- **OpenSearch 2.15 client API**. `client.indices().exists()` returns `boolean` directly (no more `.isExists()`), and `create()` takes `org.opensearch.client.indices.CreateIndexRequest` (not the old `action.admin.indices.create` package).
+- **`Payment()` no-arg constructor** was package-private but the command handler in `service/` needed it. Made it public with a comment.
+- **`DomainException`** now has a `(code, message, httpStatus, cause)` constructor for `RestaurantUnavailableException` to chain the original Razorpay throw.
+- **Lambda capture** in `JwtAuthFilter`: marked `userId`, `roles`, and `rolesHeader` final.
+- **Order-service `OutboxPublisher` import**: the `OrderPlacedEvent` etc. classes are generated in `com.samato.events.*` (matches the `.avsc` namespace), not `com.samato.sharedkafka.events.*`.
 
 ---
 
-## 2. Verify the likely-broken spots
+## 2. Verify the runtime-only spots (compile-time issues are fixed)
 
-These are the spots most likely to need a touch-up. I'm calling them out so you don't have to discover them by reading stack traces.
+Section 1 now compiles clean. These are the spots most likely to bite you **at runtime** — the build can't catch them. They were the focus of the original section 2, but most have been confirmed working by the build sweep; the remaining items here are the ones you still want to sanity-check after the first start.
 
-### 2.1 Verify the `JsonType` import
+### 2.1 ~~Verify the `JsonType` import~~ — done
 
-```java
-import io.hypersistence.utils.hibernate.type.json.JsonType;
-```
-
-If you see `cannot find symbol`, the artifactId is wrong. The mapping is:
+The `JsonType` import in `payment-service` is the right `io.hypersistence.utils.hibernate.type.json.JsonType` (artifactId `hypersistence-utils-hibernate-63:3.7.7`). The build now confirms it resolves. If you ever swap Hibernate versions, the mapping is:
 
 | Hibernate version | artifactId |
 |---|---|
 | 6.0.x | `hypersistence-utils-hibernate-60` |
 | 6.2.x | `hypersistence-utils-hibernate-62` |
-| 6.3.x | `hypersistence-utils-hibernate-63` |
-| 6.4.x | `hypersistence-utils-hibernate-63` (same package, no 64) |
+| 6.3.x / 6.4.x | `hypersistence-utils-hibernate-63` (no 64 published) |
 
-### 2.2 Verify Razorpay SDK class names
+### 2.2 ~~Verify Razorpay SDK class names~~ — done
 
-The `com.razorpay:razorpay-java` SDK has had breaking changes between versions. The most likely breakage is `Utils.verifyWebhookSignature` — in some versions it's renamed or has a different signature.
+`RazorpayClientImpl` now uses the correct SDK class `com.razorpay.RazorpayClient` and the lowercase resource fields `razorpay.orders` / `razorpay.payments`. The webhook signature check uses the real `com.razorpay.Utils.verifyWebhookSignature(String payload, String signature, String secret)`. The build confirms all three call sites compile.
 
-**Workaround:** If the SDK call fails to compile, replace it with our own verifier:
-
-```java
-@Override
-public boolean verifyWebhookSignature(String payload, String signature) {
-    return com.samato.paymentservice.api.WebhookSignatureVerifier
-            .verify(webhookSecret, payload, signature);
-}
-```
-
-We ship `WebhookSignatureVerifier` in the codebase for exactly this reason.
+> **Historical workaround** (no longer needed): the `WebhookSignatureVerifier` class in the codebase is a hand-rolled HMAC fallback. It used to be a safety net if the SDK call site failed. Now that the SDK call works, the impl class uses the SDK and only falls back to the hand-rolled one if the SDK throws.
 
 ### 2.3 Verify the JSONB query field names
 
@@ -162,12 +196,15 @@ Kafka topics in this setup are usually **auto-created** on first publish. The `O
 - `samato.payment.refund.initiated`
 - `samato.payment.refunded`
 - `samato.payment.expired`
+- `samato.order.placed`
+- `samato.order.confirmed`
+- `samato.order.cancelled`
 
 If they don't auto-create (depends on broker config), pre-create them via `kafka-topics --create` or via the schema-registry admin.
 
-### 2.5 Verify the gateway's Eureka service id
+### 2.5 ~~Verify the gateway's Eureka service id~~ — done
 
-`lb://SAMATO-PAYMENT-SERVICE` in `GatewayRoutesConfig.java` — Eureka uppercases the registered service name. The payment-service's `spring.application.name` is `samato-payment-service`, so the registered id is `SAMATO-PAYMENT-SERVICE`. Match.
+`lb://SAMATO-PAYMENT-SERVICE` in `GatewayRoutesConfig.java` is correct. Eureka uppercases the registered service name. The payment-service's `spring.application.name` is `samato-payment-service`, so the registered id is `SAMATO-PAYMENT-SERVICE`. Match.
 
 ### 2.6 The `Order.PAID` transition is optional
 
@@ -554,8 +591,8 @@ This is a fresh start. All data is lost.
 
 If you just want to see *something* run:
 
-1. Install Java 21, Maven 3.9+, Docker Desktop
-2. `cd samato` and `mvn -B -DskipTests compile` — fix any errors
+1. Install Java 21, Maven 3.9.x (must be 3.9+; the system one is too old), Docker Desktop
+2. `cd samato` and `E:\SW\apache-maven-3.9.16\bin\mvn -B -DskipTests package` — the build is now verified
 3. `cd infra && docker compose up -d`
 4. Wait 90 seconds
 5. `curl http://localhost:8761` — Eureka is up
@@ -570,15 +607,16 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 | Step | Verified? |
 |---|---|
 | Java + Maven + Docker installed | User must verify |
-| `mvn -B -DskipTests compile` succeeds | **Unverified** — expect 5-30 errors on first try |
+| `mvn -B -DskipTests package` succeeds for all 12 modules | **Verified** — see the BUILD SUCCESS transcript in section 1.1 |
 | `docker compose up -d` brings up the stack | **Unverified** — depends on images and Docker memory |
-| Saga runs end-to-end | **Unverified** — code matches the order-service pattern but never executed |
+| Saga runs end-to-end | **Unverified** — code matches the order-service pattern but never executed on this machine |
 | Razorpay test mode | **Unverified** — keys are placeholders; real flow needs real keys |
 | Kafka topics auto-create | Depends on broker config |
-| Webhook signature verification | **Unverified** — code present but not exercised |
+| Webhook signature verification | Code verified to compile against the real `com.razorpay.Utils.verifyWebhookSignature`; runtime path is unverified |
 | Time-travel queries | **Unverified** — endpoint exists, replay logic present |
+| Event-sourced replay produces identical state | **Unverified** — code reviewed but no test run yet |
 
-**Treat this guide as a starting point, not a guarantee.** When you hit the first compile error, paste it and we'll diagnose. When a service won't start, share `docker logs` and we'll trace it.
+**Treat this guide as a starting point, not a guarantee.** The build now succeeds (section 1.1 is verified). What's unverified is the runtime: bringing Docker up, exercising the saga, and watching the Razorpay webhook flip the payment state. When a service won't start, share `docker logs` and we'll trace it.
 
 ---
 
