@@ -6,6 +6,7 @@ import com.samato.paymentservice.api.PaymentDtos.CreatePaymentRequest;
 import com.samato.paymentservice.api.PaymentDtos.PaymentResponse;
 import com.samato.paymentservice.api.PaymentDtos.RefundRequest;
 import com.samato.paymentservice.domain.Money;
+import com.samato.paymentservice.domain.Payment;
 import com.samato.paymentservice.domain.command.PaymentCommand;
 import com.samato.paymentservice.query.PaymentQueryService;
 import com.samato.paymentservice.service.PaymentService;
@@ -60,7 +61,8 @@ public class PaymentController {
                 req.orderId(),
                 req.customerId(),
                 Money.of(req.amount(), req.currency()),
-                req.currency()
+                req.currency(),
+                idempotencyKey
         );
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.createRazorpayOrder(cmd, idempotencyKey));
@@ -106,7 +108,8 @@ public class PaymentController {
         PaymentCommand.RefundPayment cmd = new PaymentCommand.RefundPayment(
                 UUID.randomUUID(),
                 id,
-                Money.of(req.amount(), p.getCurrency())
+                Money.of(req.amount(), p.getCurrency()),
+                idempotencyKey
         );
         return paymentService.refund(cmd, idempotencyKey);
     }

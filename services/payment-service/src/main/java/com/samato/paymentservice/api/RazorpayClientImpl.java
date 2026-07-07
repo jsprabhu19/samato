@@ -1,7 +1,6 @@
 package com.samato.paymentservice.api;
 
 import com.razorpay.Order;
-import com.razorpay.Razorpay;
 import com.razorpay.RazorpayException;
 import com.razorpay.Refund;
 import com.razorpay.Utils;
@@ -31,13 +30,17 @@ public class RazorpayClientImpl implements RazorpayClient {
 
     private static final Logger log = LoggerFactory.getLogger(RazorpayClientImpl.class);
 
-    private final Razorpay razorpay;
+    private final com.razorpay.RazorpayClient razorpay;
     private final String webhookSecret;
 
     public RazorpayClientImpl(@Value("${razorpay.key_id}") String keyId,
                               @Value("${razorpay.key_secret}") String keySecret,
                               @Value("${razorpay.webhook_secret}") String webhookSecret) {
-        this.razorpay = new Razorpay(keyId, keySecret);
+        try {
+            this.razorpay = new com.razorpay.RazorpayClient(keyId, keySecret);
+        } catch (RazorpayException e) {
+            throw new IllegalStateException("Could not initialise Razorpay client", e);
+        }
         this.webhookSecret = webhookSecret;
         log.info("RazorpayClientImpl initialised (key_id={})", maskKey(keyId));
     }
@@ -60,7 +63,7 @@ public class RazorpayClientImpl implements RazorpayClient {
             log.info("Creating Razorpay order: receipt={} amountPaise={} currency={}",
                     receipt, amountPaise, currency);
 
-            Order order = razorpay.Orders.create(request);
+            Order order = razorpay.orders.create(request);
             String orderId = order.get("id");
             String status = order.get("status");
             long amount = order.get("amount");
@@ -82,7 +85,7 @@ public class RazorpayClientImpl implements RazorpayClient {
             request.put("amount", amountPaise);
 
             log.info("Refunding Razorpay payment {}: amountPaise={}", razorpayPaymentId, amountPaise);
-            Refund refund = razorpay.Payments.refund(razorpayPaymentId, request);
+            Refund refund = razorpay.payments.refund(razorpayPaymentId, request);
 
             return new RazorpayRefundResult(
                     refund.get("id"),

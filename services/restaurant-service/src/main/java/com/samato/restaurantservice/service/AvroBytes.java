@@ -1,10 +1,8 @@
 package com.samato.restaurantservice.service;
 
-import com.samato.sharedkafka.events.DomainEvent;
 import org.apache.avro.file.CodecFactory;
 import org.apache.avro.file.DataFileReader;
 import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.DatumWriter;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificDatumWriter;
@@ -53,15 +51,16 @@ final class AvroBytes {
     }
 
     @SuppressWarnings("unchecked")
-    static DomainEvent decode(String eventType, byte[] payload) {
+    static SpecificRecord decode(String eventType, byte[] payload) {
         Class<? extends SpecificRecord> cls = REGISTRY.get(eventType);
         if (cls == null) {
             throw new IllegalStateException("No Avro class registered for event type: " + eventType);
         }
-        DatumReader<SpecificRecord> reader = new SpecificDatumReader<>(cls);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        SpecificDatumReader<SpecificRecord> reader = new SpecificDatumReader<>((Class) cls);
         try (DataFileReader<SpecificRecord> r =
                      new DataFileReader<>(new ByteArrayInputStream(payload), reader)) {
-            return (DomainEvent) r.next();
+            return r.next();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to decode Avro record of type " + eventType, e);
         }

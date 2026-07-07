@@ -16,11 +16,7 @@ import java.util.UUID;
  * in compensation case). The {@code commandId} is a separate UUID that
  * we use to trace the command through the event store.
  */
-public sealed interface PaymentCommand
-        permits CreateRazorpayOrder,
-                InitiatePayment,
-                RefundPayment,
-                MarkExpired {
+public sealed interface PaymentCommand {
 
     UUID commandId();
     UUID paymentId();

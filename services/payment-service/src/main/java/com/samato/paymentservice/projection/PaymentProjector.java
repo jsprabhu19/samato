@@ -2,13 +2,7 @@ package com.samato.paymentservice.projection;
 
 import com.samato.paymentservice.domain.PaymentStatus;
 import com.samato.paymentservice.domain.event.PaymentEvent;
-import com.samato.paymentservice.domain.event.PaymentExpired;
-import com.samato.paymentservice.domain.event.PaymentFailed;
-import com.samato.paymentservice.domain.event.PaymentInitiated;
-import com.samato.paymentservice.domain.event.RazorpayOrderCreated;
-import com.samato.paymentservice.domain.event.RefundCompleted;
-import com.samato.paymentservice.domain.event.RefundInitiated;
-import com.samato.paymentservice.domain.event.PaymentCaptured;
+import com.samato.paymentservice.eventstore.EventSerde;
 import com.samato.paymentservice.eventstore.EventStoreEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,9 +37,11 @@ public class PaymentProjector {
     private static final Logger log = LoggerFactory.getLogger(PaymentProjector.class);
 
     private final PaymentViewRepository repository;
+    private final EventSerde eventSerde;
 
-    public PaymentProjector(PaymentViewRepository repository) {
+    public PaymentProjector(PaymentViewRepository repository, EventSerde eventSerde) {
         this.repository = repository;
+        this.eventSerde = eventSerde;
     }
 
     /**
@@ -75,7 +71,7 @@ public class PaymentProjector {
 
         switch (e.getEventType()) {
             case "RazorpayOrderCreated" -> {
-                RazorpayOrderCreated ev = typed(e, RazorpayOrderCreated.class);
+                PaymentEvent.RazorpayOrderCreated ev = typed(e, PaymentEvent.RazorpayOrderCreated.class);
                 view.setOrderId(ev.orderId());
                 view.setCustomerId(ev.customerId());
                 view.setAmount(ev.amount().amount());
@@ -84,22 +80,22 @@ public class PaymentProjector {
                 view.setStatus(PaymentStatus.ORDER_CREATED);
             }
             case "PaymentInitiated" -> {
-                PaymentInitiated ev = typed(e, PaymentInitiated.class);
+                PaymentEvent.PaymentInitiated ev = typed(e, PaymentEvent.PaymentInitiated.class);
                 view.setRazorpayPaymentId(ev.razorpayPaymentId());
                 view.setStatus(PaymentStatus.PAYMENT_INITIATED);
             }
             case "PaymentCaptured" -> {
-                PaymentCaptured ev = typed(e, PaymentCaptured.class);
+                PaymentEvent.PaymentCaptured ev = typed(e, PaymentEvent.PaymentCaptured.class);
                 view.setRazorpayPaymentId(ev.razorpayPaymentId());
                 view.setStatus(PaymentStatus.CAPTURED);
             }
             case "PaymentFailed" -> {
-                PaymentFailed ev = typed(e, PaymentFailed.class);
+                PaymentEvent.PaymentFailed ev = typed(e, PaymentEvent.PaymentFailed.class);
                 view.setRazorpayPaymentId(ev.razorpayPaymentId());
                 view.setStatus(PaymentStatus.FAILED);
             }
             case "RefundInitiated" -> {
-                RefundInitiated ev = typed(e, RefundInitiated.class);
+                PaymentEvent.RefundInitiated ev = typed(e, PaymentEvent.RefundInitiated.class);
                 view.setRazorpayPaymentId(ev.razorpayPaymentId());
                 view.setStatus(PaymentStatus.REFUND_INITIATED);
             }
@@ -114,11 +110,8 @@ public class PaymentProjector {
     }
 
     private <T> T typed(EventStoreEntry e, Class<T> type) {
-        // Re-use EventSerde.typed would be ideal; we use ObjectMapper
-        // directly here for clarity.
         try {
-            return com.samato.paymentservice.eventstore.EventSerde
-                    .mapper().readValue(e.getEventData(), type);
+            return eventSerde.mapper().readValue(e.getEventData(), type);
         } catch (Exception ex) {
             throw new IllegalStateException("Could not deserialise " + e.getEventType(), ex);
         }

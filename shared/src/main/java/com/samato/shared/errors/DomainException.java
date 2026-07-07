@@ -20,6 +20,12 @@ public class DomainException extends RuntimeException {
         this.httpStatus = httpStatus;
     }
 
+    public DomainException(String code, String message, int httpStatus, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+        this.httpStatus = httpStatus;
+    }
+
     public String getCode() { return code; }
     public int getHttpStatus() { return httpStatus; }
 }

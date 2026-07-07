@@ -77,15 +77,15 @@ public class SearchController {
                 .size(size);
 
         SearchRequest req = new SearchRequest(RestaurantProjector.INDEX).source(source);
-        SearchResponse resp = osClient.search(req, RequestOptions.DEFAULT);
+        org.opensearch.action.search.SearchResponse osResp = osClient.search(req, RequestOptions.DEFAULT);
 
         List<Map<String, Object>> hits = new ArrayList<>();
-        for (SearchHit h : resp.getHits().getHits()) {
+        for (SearchHit h : osResp.getHits().getHits()) {
             Map<String, Object> doc = new HashMap<>(h.getSourceAsMap());
             doc.put("_score", h.getScore());
             hits.add(doc);
         }
-        return new SearchResponse(resp.getHits().getTotalHits().value, hits);
+        return new SearchResponse(osResp.getHits().getTotalHits().value, hits);
     }
 
     public record SearchResponse(long total, List<Map<String, Object>> hits) {}

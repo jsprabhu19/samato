@@ -20,14 +20,7 @@ import java.util.UUID;
  *   - Events are deserialised by {@code PostgresEventStore} which uses
  *     the {@code eventType} discriminator.
  */
-public sealed interface PaymentEvent
-        permits RazorpayOrderCreated,
-                PaymentInitiated,
-                PaymentCaptured,
-                PaymentFailed,
-                RefundInitiated,
-                RefundCompleted,
-                PaymentExpired {
+public sealed interface PaymentEvent {
 
     UUID paymentId();
 

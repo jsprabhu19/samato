@@ -55,10 +55,10 @@ public class Outbox {
     public static final String TOPIC_RESTAURANT_UPDATED = "samato.restaurant.updated";
 
     private final OutboxEventRepository outboxRepo;
-    private final KafkaTemplate<String, com.samato.sharedkafka.events.DomainEvent> kafkaTemplate;
+    private final KafkaTemplate<String, org.apache.avro.specific.SpecificRecord> kafkaTemplate;
 
     public Outbox(OutboxEventRepository outboxRepo,
-                  @Autowired KafkaTemplate<String, com.samato.sharedkafka.events.DomainEvent> kafkaTemplate) {
+                  @Autowired KafkaTemplate<String, org.apache.avro.specific.SpecificRecord> kafkaTemplate) {
         this.outboxRepo = outboxRepo;
         this.kafkaTemplate = kafkaTemplate;
     }
@@ -100,7 +100,7 @@ public class Outbox {
                 "com.samato.events.RestaurantUpdatedEvent", ev);
     }
 
-    private <T extends com.samato.sharedkafka.events.DomainEvent> void enqueue(
+    private <T extends org.apache.avro.specific.SpecificRecord> void enqueue(
             java.util.UUID aggregateId, String topic, String eventType, T event) {
         // Encode the Avro record to bytes using the same serializer Kafka uses,
         // so the bytes in the outbox are exactly what the producer would send.
@@ -123,8 +123,8 @@ public class Outbox {
         List<OutboxEvent> pending = outboxRepo.findUnsent();
         for (OutboxEvent e : pending) {
             try {
-                com.samato.sharedkafka.events.DomainEvent decoded = AvroBytes.decode(e.getEventType(), e.getPayload());
-                ProducerRecord<String, com.samato.sharedkafka.events.DomainEvent> record =
+                org.apache.avro.specific.SpecificRecord decoded = AvroBytes.decode(e.getEventType(), e.getPayload());
+                ProducerRecord<String, org.apache.avro.specific.SpecificRecord> record =
                         new ProducerRecord<>(e.getTopic(), e.getAggregateId().toString(), decoded);
                 // Sync send — we want to know it succeeded before marking sent.
                 kafkaTemplate.send(record).get(5, java.util.concurrent.TimeUnit.SECONDS);

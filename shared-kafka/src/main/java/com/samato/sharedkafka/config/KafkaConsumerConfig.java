@@ -1,8 +1,8 @@
 package com.samato.sharedkafka.config;
 
-import com.samato.sharedkafka.events.DomainEvent;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,7 +45,7 @@ public class KafkaConsumerConfig {
     private String schemaRegistryUrl;
 
     @Bean
-    public ConsumerFactory<String, DomainEvent> consumerFactory() {
+    public ConsumerFactory<String, SpecificRecord> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -62,9 +62,9 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, DomainEvent> kafkaListenerContainerFactory(
-            ConsumerFactory<String, DomainEvent> cf) {
-        ConcurrentKafkaListenerContainerFactory<String, DomainEvent> factory =
+    public ConcurrentKafkaListenerContainerFactory<String, SpecificRecord> kafkaListenerContainerFactory(
+            ConsumerFactory<String, SpecificRecord> cf) {
+        ConcurrentKafkaListenerContainerFactory<String, SpecificRecord> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(cf);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);

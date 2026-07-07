@@ -3,7 +3,7 @@ package com.samato.searchservice.projection;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.samato.events.RestaurantCreatedEvent;
 import com.samato.events.RestaurantUpdatedEvent;
-import com.samato.sharedkafka.events.DomainEvent;
+import org.apache.avro.specific.SpecificRecord;
 import org.opensearch.action.index.IndexRequest;
 import org.opensearch.action.index.IndexResponse;
 import org.opensearch.client.RequestOptions;
@@ -46,7 +46,7 @@ public class RestaurantProjector {
         this.osClient = osClient;
     }
 
-    public void apply(DomainEvent ev) {
+    public void apply(SpecificRecord ev) {
         try {
             Map<String, Object> doc = new HashMap<>();
             if (ev instanceof RestaurantCreatedEvent c) {

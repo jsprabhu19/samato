@@ -64,6 +64,34 @@
         <module>services/payment-service</module>
     </modules>
 
+    <repositories>
+        <!-- Confluent's Maven repo is needed for io.confluent:kafka-avro-serializer.
+             Spring Boot's BOM does not include Confluent artifacts. -->
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
     <dependencyManagement>
         <dependencies>
             <dependency>

@@ -2,15 +2,8 @@ package com.samato.paymentservice.eventstore;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.samato.paymentservice.domain.event.PaymentEvent;
-import com.samato.paymentservice.domain.event.PaymentExpired;
-import com.samato.paymentservice.domain.event.PaymentFailed;
-import com.samato.paymentservice.domain.event.PaymentInitiated;
-import com.samato.paymentservice.domain.event.RazorpayOrderCreated;
-import com.samato.paymentservice.domain.event.RefundCompleted;
-import com.samato.paymentservice.domain.event.RefundInitiated;
-import com.samato.paymentservice.domain.event.PaymentCaptured;
 import com.samato.paymentservice.domain.Money;
+import com.samato.paymentservice.domain.event.PaymentEvent;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -47,18 +40,22 @@ public class EventSerde {
     public PaymentEvent fromJson(String eventType, String json) {
         try {
             return switch (eventType) {
-                case "RazorpayOrderCreated" -> objectMapper.readValue(json, RazorpayOrderCreated.class);
-                case "PaymentInitiated"     -> objectMapper.readValue(json, PaymentInitiated.class);
-                case "PaymentCaptured"      -> objectMapper.readValue(json, PaymentCaptured.class);
-                case "PaymentFailed"        -> objectMapper.readValue(json, PaymentFailed.class);
-                case "RefundInitiated"      -> objectMapper.readValue(json, RefundInitiated.class);
-                case "RefundCompleted"      -> objectMapper.readValue(json, RefundCompleted.class);
-                case "PaymentExpired"       -> objectMapper.readValue(json, PaymentExpired.class);
+                case "RazorpayOrderCreated" -> objectMapper.readValue(json, PaymentEvent.RazorpayOrderCreated.class);
+                case "PaymentInitiated"     -> objectMapper.readValue(json, PaymentEvent.PaymentInitiated.class);
+                case "PaymentCaptured"      -> objectMapper.readValue(json, PaymentEvent.PaymentCaptured.class);
+                case "PaymentFailed"        -> objectMapper.readValue(json, PaymentEvent.PaymentFailed.class);
+                case "RefundInitiated"      -> objectMapper.readValue(json, PaymentEvent.RefundInitiated.class);
+                case "RefundCompleted"      -> objectMapper.readValue(json, PaymentEvent.RefundCompleted.class);
+                case "PaymentExpired"       -> objectMapper.readValue(json, PaymentEvent.PaymentExpired.class);
                 default -> throw new IllegalArgumentException("Unknown event type: " + eventType);
             };
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not deserialise event " + eventType, e);
         }
+    }
+
+    public ObjectMapper mapper() {
+        return objectMapper;
     }
 
     /**

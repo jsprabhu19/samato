@@ -1,11 +1,12 @@
 package com.samato.searchservice.config;
 
 import org.apache.http.HttpHost;
-import org.opensearch.action.admin.indices.create.CreateIndexRequest;
-import org.opensearch.action.admin.indices.create.CreateIndexResponse;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
+import org.opensearch.client.indices.CreateIndexRequest;
+import org.opensearch.client.indices.CreateIndexResponse;
+import org.opensearch.client.indices.GetIndexRequest;
 import org.opensearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,8 +46,8 @@ public class OpenSearchIndexInitializer {
     public void ensureIndex() {
         try {
             boolean exists = client.indices().exists(
-                    new org.opensearch.client.indices.GetIndexRequest(INDEX),
-                    RequestOptions.DEFAULT).isExists();
+                    new GetIndexRequest(INDEX),
+                    RequestOptions.DEFAULT);
             if (exists) {
                 log.info("OpenSearch index '{}' already exists", INDEX);
                 return;

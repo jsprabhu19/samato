@@ -3,13 +3,6 @@ package com.samato.paymentservice.domain;
 import com.samato.paymentservice.eventstore.snapshot.Snapshotter;
 import com.samato.paymentservice.domain.command.PaymentCommand;
 import com.samato.paymentservice.domain.event.PaymentEvent;
-import com.samato.paymentservice.domain.event.PaymentExpired;
-import com.samato.paymentservice.domain.event.PaymentFailed;
-import com.samato.paymentservice.domain.event.PaymentInitiated;
-import com.samato.paymentservice.domain.event.RazorpayOrderCreated;
-import com.samato.paymentservice.domain.event.RefundCompleted;
-import com.samato.paymentservice.domain.event.RefundInitiated;
-import com.samato.paymentservice.domain.event.PaymentCaptured;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,12 +86,19 @@ public class Payment {
         return p;
     }
 
-    /** Test-only no-arg constructor. Don't use in production code. */
-    Payment() {}
+    /**
+     * No-arg constructor. Used both by the static factories
+     * ({@link #rehydrate}, {@link #rehydrateFromSnapshot}) and by
+     * the command handler when creating a brand-new aggregate.
+     * Exposed as public because the handler lives in another package;
+     * the design intent is "instantiate through rehydrate or through
+     * a decide method, not by mutating fields directly."
+     */
+    public Payment() {}
 
     // -- command entry points (the *decide* phase) ---------------------
 
-    public RazorpayOrderCreated createOrder(PaymentCommand.CreateRazorpayOrder cmd,
+    public PaymentEvent.RazorpayOrderCreated createOrder(PaymentCommand.CreateRazorpayOrder cmd,
                                             String razorpayOrderId,
                                             int nextVersion) {
         if (razorpayOrderId == null || razorpayOrderId.isBlank()) {
@@ -107,44 +107,44 @@ public class Payment {
         if (!"INR".equals(cmd.currency())) {
             throw new IllegalStateException("Currency must be INR; got " + cmd.currency());
         }
-        RazorpayOrderCreated event = new RazorpayOrderCreated(
+        PaymentEvent.RazorpayOrderCreated event = new PaymentEvent.RazorpayOrderCreated(
                 cmd.paymentId(), cmd.orderId(), cmd.customerId(),
                 razorpayOrderId, cmd.amount(), cmd.currency(), nextVersion);
         apply(event);
         return event;
     }
 
-    public PaymentInitiated markPaymentInitiated(PaymentCommand.InitiatePayment cmd, int nextVersion) {
+    public PaymentEvent.PaymentInitiated markPaymentInitiated(PaymentCommand.InitiatePayment cmd, int nextVersion) {
         if (status != PaymentStatus.ORDER_CREATED) {
             throw new IllegalStateException("Payment not in ORDER_CREATED: " + status);
         }
-        PaymentInitiated event = new PaymentInitiated(
+        PaymentEvent.PaymentInitiated event = new PaymentEvent.PaymentInitiated(
                 cmd.paymentId(), razorpayOrderId, cmd.razorpayPaymentId(), nextVersion);
         apply(event);
         return event;
     }
 
-    public PaymentCaptured markCaptured(String razorpayPaymentId, int nextVersion) {
+    public PaymentEvent.PaymentCaptured markCaptured(String razorpayPaymentId, int nextVersion) {
         if (status == PaymentStatus.CAPTURED || status == PaymentStatus.REFUNDED) {
             throw new IllegalStateException("Payment already captured/refunded: " + status);
         }
-        PaymentCaptured event = new PaymentCaptured(
+        PaymentEvent.PaymentCaptured event = new PaymentEvent.PaymentCaptured(
                 paymentId, razorpayOrderId, razorpayPaymentId, amount, nextVersion);
         apply(event);
         return event;
     }
 
-    public PaymentFailed markFailed(String razorpayPaymentId, String code, String desc, int nextVersion) {
+    public PaymentEvent.PaymentFailed markFailed(String razorpayPaymentId, String code, String desc, int nextVersion) {
         if (status == PaymentStatus.REFUNDED) {
             throw new IllegalStateException("Cannot fail a refunded payment");
         }
-        PaymentFailed event = new PaymentFailed(
+        PaymentEvent.PaymentFailed event = new PaymentEvent.PaymentFailed(
                 paymentId, razorpayOrderId, razorpayPaymentId, code, desc, nextVersion);
         apply(event);
         return event;
     }
 
-    public RefundInitiated initiateRefund(PaymentCommand.RefundPayment cmd,
+    public PaymentEvent.RefundInitiated initiateRefund(PaymentCommand.RefundPayment cmd,
                                           String razorpayRefundId,
                                           int nextVersion) {
         if (status != PaymentStatus.CAPTURED) {
@@ -153,14 +153,14 @@ public class Payment {
         if (!cmd.amount().currency().equals(currency)) {
             throw new IllegalStateException("Refund currency mismatch: " + cmd.amount().currency());
         }
-        RefundInitiated event = new RefundInitiated(
+        PaymentEvent.RefundInitiated event = new PaymentEvent.RefundInitiated(
                 paymentId, razorpayOrderId, razorpayPaymentId,
                 razorpayRefundId, cmd.amount(), nextVersion);
         apply(event);
         return event;
     }
 
-    public RefundCompleted completeRefund(String razorpayRefundId, Money refundAmount, int nextVersion) {
+    public PaymentEvent.RefundCompleted completeRefund(String razorpayRefundId, Money refundAmount, int nextVersion) {
         if (status != PaymentStatus.REFUND_INITIATED) {
             throw new IllegalStateException("Cannot complete refund in state: " + status);
         }
@@ -168,16 +168,16 @@ public class Payment {
             throw new IllegalStateException("Refund id mismatch: " + razorpayRefundId
                     + " vs " + lastRazorpayRefundId);
         }
-        RefundCompleted event = new RefundCompleted(paymentId, razorpayRefundId, refundAmount, nextVersion);
+        PaymentEvent.RefundCompleted event = new PaymentEvent.RefundCompleted(paymentId, razorpayRefundId, refundAmount, nextVersion);
         apply(event);
         return event;
     }
 
-    public PaymentExpired markExpired(int nextVersion) {
+    public PaymentEvent.PaymentExpired markExpired(int nextVersion) {
         if (status == PaymentStatus.CAPTURED || status == PaymentStatus.REFUNDED) {
             throw new IllegalStateException("Cannot expire captured/refunded payment");
         }
-        PaymentExpired event = new PaymentExpired(paymentId, razorpayOrderId, nextVersion);
+        PaymentEvent.PaymentExpired event = new PaymentEvent.PaymentExpired(paymentId, razorpayOrderId, nextVersion);
         apply(event);
         return event;
     }
@@ -190,7 +190,7 @@ public class Payment {
      */
     void apply(PaymentEvent e) {
         switch (e) {
-            case RazorpayOrderCreated c -> {
+            case PaymentEvent.RazorpayOrderCreated c -> {
                 if (this.paymentId == null) {
                     // First event — establishes identity.
                     this.paymentId  = c.paymentId();
@@ -206,26 +206,26 @@ public class Payment {
                 this.status          = PaymentStatus.ORDER_CREATED;
                 this.razorpayOrderId = c.razorpayOrderId();
             }
-            case PaymentInitiated i -> {
+            case PaymentEvent.PaymentInitiated i -> {
                 this.status           = PaymentStatus.PAYMENT_INITIATED;
                 this.razorpayPaymentId = i.razorpayPaymentId();
             }
-            case PaymentCaptured cap -> {
+            case PaymentEvent.PaymentCaptured cap -> {
                 this.status           = PaymentStatus.CAPTURED;
                 this.razorpayPaymentId = cap.razorpayPaymentId();
             }
-            case PaymentFailed f -> {
+            case PaymentEvent.PaymentFailed f -> {
                 this.status           = PaymentStatus.FAILED;
                 this.razorpayPaymentId = f.razorpayPaymentId();
             }
-            case RefundInitiated r -> {
+            case PaymentEvent.RefundInitiated r -> {
                 this.status               = PaymentStatus.REFUND_INITIATED;
                 this.lastRazorpayRefundId = r.razorpayRefundId();
             }
-            case RefundCompleted c -> {
+            case PaymentEvent.RefundCompleted cc -> {
                 this.status = PaymentStatus.REFUNDED;
             }
-            case PaymentExpired ex -> {
+            case PaymentEvent.PaymentExpired ex -> {
                 this.status = PaymentStatus.EXPIRED;
             }
         }

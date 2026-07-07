@@ -72,15 +72,17 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         try {
             Jwt jwt = jwtDecoder.decode(token);
-            String userId = jwt.getClaimAsString("user_id");
-            if (userId == null) userId = jwt.getSubject();
-            var roles = jwt.getClaimAsStringList("roles");
-            String rolesHeader = roles == null ? "" : String.join(",", roles);
+            final String userId;
+            String userIdClaim = jwt.getClaimAsString("user_id");
+            if (userIdClaim == null) userIdClaim = jwt.getSubject();
+            userId = userIdClaim == null ? "" : userIdClaim;
+            final var roles = jwt.getClaimAsStringList("roles");
+            final String rolesHeader = roles == null ? "" : String.join(",", roles);
 
             // Mutate the request to inject the headers, then proceed.
             return chain.filter(exchange.mutate()
                     .request(r -> r
-                            .header(USER_ID_HEADER, userId == null ? "" : userId)
+                            .header(USER_ID_HEADER, userId)
                             .header(ROLES_HEADER, rolesHeader))
                     .build());
         } catch (JwtException ex) {
