@@ -1,0 +1,17 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "PaymentChargedEvent",
+  "doc": "Emitted by payment-service when Razorpay captures a payment (i.e. customer has actually paid).",
+  "fields": [
+    {"name": "eventId",         "type": "string", "doc": "Unique event id, for idempotent consumers."},
+    {"name": "occurredAt",      "type": "long",   "doc": "Epoch millis when the event was created."},
+    {"name": "paymentId",       "type": "string", "doc": "Internal payment-service aggregate id (UUID)."},
+    {"name": "orderId",         "type": "string", "doc": "Order from order-service (UUID, used as Razorpay receipt)."},
+    {"name": "customerId",      "type": "string", "doc": "Customer UUID."},
+    {"name": "razorpayOrderId", "type": "string", "doc": "Razorpay order id (e.g. 'order_XXXX')."},
+    {"name": "razorpayPaymentId","type": "string","doc": "Razorpay payment id (e.g. 'pay_XXXX')."},
+    {"name": "amount",          "type": "string", "doc": "Amount as string-encoded BigDecimal (rupees)."},
+    {"name": "currency",        "type": "string", "doc": "ISO 4217 (always 'INR' in the bible)."}
+  ]
+}

@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Each service exposes its own /actuator/prometheus endpoint.
+  # Service discovery via DNS — Docker compose puts each service on the samato-net network.
+  - job_name: spring-boot-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - host.docker.internal:8888   # samato-config-service
+          - host.docker.internal:8761   # samato-discovery-service
+          - host.docker.internal:8080   # samato-api-gateway
+        labels:
+          env: local
+
+  - job_name: zipkin
+    metrics_path: /prometheus
+    static_configs:
+      - targets: ["zipkin:9411"]

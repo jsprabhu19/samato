@@ -1,0 +1,58 @@
+server:
+  port: 8087
+  shutdown: graceful
+
+spring:
+  application:
+    name: samato-search-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:9000/.well-known/jwks.json
+  kafka:
+    bootstrap-servers: localhost:9092
+    properties:
+      schema.registry.url: http://localhost:8085
+    consumer:
+      group-id: samato-search-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        specific.avro.reader: true
+        max.poll.records: 50
+    listener:
+      ack-mode: manual_immediate
+
+samato:
+  opensearch:
+    host: localhost
+    port: 9200
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}]"
+  level:
+    com.samato: DEBUG
+    org.apache.kafka: WARN

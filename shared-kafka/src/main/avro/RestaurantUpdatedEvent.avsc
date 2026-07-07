@@ -1,0 +1,18 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "RestaurantUpdatedEvent",
+  "doc": "Emitted when a restaurant's editable fields change (name, description, address, etc).",
+  "fields": [
+    {"name": "eventId",     "type": "string"},
+    {"name": "occurredAt",  "type": "long"},
+    {"name": "restaurantId","type": "string"},
+    {"name": "name",        "type": "string"},
+    {"name": "description", "type": ["null", "string"], "default": null},
+    {"name": "cuisine",     "type": "string"},
+    {"name": "address",     "type": "string"},
+    {"name": "city",        "type": "string"},
+    {"name": "latitude",    "type": "double"},
+    {"name": "longitude",   "type": "double"}
+  ]
+}

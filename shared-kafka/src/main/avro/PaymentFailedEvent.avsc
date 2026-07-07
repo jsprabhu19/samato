@@ -1,0 +1,18 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "PaymentFailedEvent",
+  "doc": "Emitted when a payment fails at Razorpay (payment.failed webhook).",
+  "fields": [
+    {"name": "eventId",            "type": "string"},
+    {"name": "occurredAt",         "type": "long"},
+    {"name": "paymentId",          "type": "string"},
+    {"name": "orderId",            "type": "string"},
+    {"name": "customerId",         "type": "string"},
+    {"name": "razorpayOrderId",    "type": "string"},
+    {"name": "errorCode",          "type": "string", "doc": "Razorpay error code (e.g. 'BAD_REQUEST_ERROR')."},
+    {"name": "errorDescription",   "type": "string", "doc": "Human-readable error description."},
+    {"name": "amount",             "type": "string", "doc": "Attempted amount in rupees."},
+    {"name": "currency",           "type": "string"}
+  ]
+}

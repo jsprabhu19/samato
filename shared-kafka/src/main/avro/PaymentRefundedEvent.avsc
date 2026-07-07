@@ -1,0 +1,17 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "PaymentRefundedEvent",
+  "doc": "Emitted when a refund is fully processed by Razorpay (refund.processed webhook).",
+  "fields": [
+    {"name": "eventId",            "type": "string", "doc": "Unique event id."},
+    {"name": "occurredAt",         "type": "long",   "doc": "Epoch millis."},
+    {"name": "paymentId",          "type": "string", "doc": "Internal payment-service aggregate id."},
+    {"name": "orderId",            "type": "string", "doc": "Original order UUID."},
+    {"name": "customerId",         "type": "string", "doc": "Customer UUID."},
+    {"name": "razorpayOrderId",    "type": "string", "doc": "Razorpay order id that was refunded."},
+    {"name": "razorpayRefundId",   "type": "string", "doc": "Razorpay refund id (e.g. 'rfnd_XXXX')."},
+    {"name": "amount",             "type": "string", "doc": "Refund amount (rupees)."},
+    {"name": "currency",           "type": "string", "doc": "ISO 4217 (INR)."}
+  ]
+}

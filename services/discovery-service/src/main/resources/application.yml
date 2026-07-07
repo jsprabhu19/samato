@@ -1,0 +1,49 @@
+server:
+  port: 8761
+  shutdown: graceful
+
+eureka:
+  client:
+    # Eureka is itself a registry. We don't need to register with another
+    # registry; we ARE the registry. Don't fetch the registry either
+    # (you'd be asking yourself for instances).
+    register-with-eureka: false
+    fetch-registry: false
+  server:
+    # Don't evict peers just because we missed a heartbeat in dev.
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
+    # Wait fewer renewals before an instance is considered "up"
+    wait-time-in-ms-when-sync-empty: 0
+  instance:
+    hostname: localhost
+
+spring:
+  application:
+    name: samato-discovery-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate: { enabled: true }
+    readinessstate: { enabled: true }
+  tracing:
+    sampling:
+      probability: 1.0
+
+management.zipkin.tracing.endpoint: http://localhost:9411/api/v2/spans
+spring.zipkin.discovery-client-enabled: false
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}]"
+  level:
+    com.netflix.eureka: INFO
+    com.samato: DEBUG

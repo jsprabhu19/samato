@@ -1,0 +1,45 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: samato-payment-service
+  datasource:
+    url: jdbc:postgresql://samato-postgres:5432/payment_service
+    username: fd
+    password: fd
+    hikari:
+      maximum-pool-size: 20
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://samato-auth-service:9000/.well-known/jwks.json
+  kafka:
+    bootstrap-servers: samato-kafka:9092
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://samato-discovery:8761/eureka/
+
+razorpay:
+  key_id:        ${RAZORPAY_KEY_ID:rzp_test_xxxxxxxxxxxxxx}
+  key_secret:    ${RAZORPAY_KEY_SECRET:placeholder_secret_xxxxxxxxxxxxxx}
+  webhook_secret: ${RAZORPAY_WEBHOOK_SECRET:placeholder_webhook_secret_xxxxxxxx}
+
+samato:
+  outbox:
+    poll-ms: 500
+  snapshot:
+    every-n-events: 50
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0

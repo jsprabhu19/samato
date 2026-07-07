@@ -1,0 +1,13 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "OrderCancelledEvent",
+  "doc": "Emitted when the saga is compensated — order is in CANCELLED state.",
+  "fields": [
+    {"name": "eventId",     "type": "string"},
+    {"name": "occurredAt",  "type": "long"},
+    {"name": "orderId",     "type": "string"},
+    {"name": "customerId",  "type": "string"},
+    {"name": "reason",      "type": "string"}
+  ]
+}

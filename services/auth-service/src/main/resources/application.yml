@@ -1,0 +1,65 @@
+server:
+  port: 9000
+  shutdown: graceful
+
+spring:
+  application:
+    name: samato-auth-service
+  profiles:
+    # Defaults to "default" so the DevDataSeeder runs. Override with
+    # SPRING_PROFILES_ACTIVE=prod (or no-seeder) for production.
+    active: ${SPRING_PROFILES_ACTIVE:default}
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth
+    username: fd
+    password: fd
+  jpa:
+    hibernate:
+      ddl-auto: validate         # Flyway owns the schema
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  security:
+    oauth2:
+      authorizationserver:
+        access-token:
+          format: self-contained     # JWT
+          lifetime: PT15M
+        refresh-token:
+          lifetime: P7D
+        grant-types:
+          password: enabled           # bible's login form uses this
+          refresh_token: enabled
+          client_credentials: enabled
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}]"
+  level:
+    org.springframework.security: INFO
+    com.samato: DEBUG

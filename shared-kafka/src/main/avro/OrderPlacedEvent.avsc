@@ -1,0 +1,16 @@
+{
+  "namespace": "com.samato.events",
+  "type": "record",
+  "name": "OrderPlacedEvent",
+  "doc": "Emitted when an order is first placed. Kitchen / payment / delivery services react.",
+  "fields": [
+    {"name": "eventId",     "type": "string"},
+    {"name": "occurredAt",  "type": "long"},
+    {"name": "orderId",     "type": "string"},
+    {"name": "customerId",  "type": "string"},
+    {"name": "restaurantId","type": "string"},
+    {"name": "totalAmount", "type": "double"},
+    {"name": "currency",    "type": "string"},
+    {"name": "itemCount",   "type": "int"}
+  ]
+}

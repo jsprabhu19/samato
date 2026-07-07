@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.samato</groupId>
+    <artifactId>samato</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Samato — Microservice Reference Bible</name>
+    <description>Reference microservice architecture for interview preparation</description>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Spring stack -->
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <spring-cloud-stream.version>4.1.3</spring-cloud-stream.version>
+        <springdoc.version>2.6.0</springdoc.version>
+        <spring-authorization-server.version>1.3.3</spring-authorization-server.version>
+
+        <!-- Resilience & observability -->
+        <resilience4j.version>2.2.0</resilience4j.version>
+        <micrometer-tracing.version>1.3.4</micrometer-tracing.version>
+        <zipkin-reporter.version>3.4.0</zipkin-reporter.version>
+
+        <!-- Persistence -->
+        <postgresql.version>42.7.4</postgresql.version>
+        <flyway.version>10.20.0</flyway.version>
+        <hibernate-types.version>3.7.7</hibernate-types.version>
+
+        <!-- Messaging -->
+        <kafka-clients.version>3.7.1</kafka-clients.version>
+        <avro.version>1.11.3</avro.version>
+        <schema-registry.version>7.6.1</schema-registry.version>
+
+        <!-- Test -->
+        <testcontainers.version>1.20.2</testcontainers.version>
+    </properties>
+
+    <modules>
+        <module>shared</module>
+        <module>shared-kafka</module>
+        <module>services/config-service</module>
+        <module>services/discovery-service</module>
+        <module>services/api-gateway</module>
+        <module>services/auth-service</module>
+        <module>services/user-service</module>
+        <module>services/restaurant-service</module>
+        <module>services/search-service</module>
+        <module>services/order-service</module>
+        <module>services/payment-service</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro-maven-plugin</artifactId>
+                    <version>${avro.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

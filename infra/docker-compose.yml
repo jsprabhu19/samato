@@ -1,0 +1,228 @@
+# Full local infrastructure for the Samato microservice bible.
+# Brings up everything a service needs to run end-to-end locally.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down -v   # nukes volumes too
+#
+# Phased: this compose starts ALL infra now so each service can plug in
+# as it comes online. Services that aren't built yet simply won't register.
+
+name: samato
+
+services:
+
+  # ─── Service Registry ────────────────────────────────────────────
+  # (No container for Eureka — it's a Spring Boot app in this monorepo,
+  # services/discovery-service. We just need to declare any infra it
+  # depends on, which is nothing.)
+
+  # ─── Postgres (per-service databases live in ONE cluster for dev) ─
+  postgres:
+    image: postgres:16-alpine
+    container_name: samato-postgres
+    environment:
+      POSTGRES_USER: fd
+      POSTGRES_PASSWORD: fd
+      POSTGRES_DB: fd_shared
+    ports: ["5432:5432"]
+    volumes:
+      - samato-pgdata:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Apache Kafka (KRaft mode, no Zookeeper) ────────────────────
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: samato-kafka
+    ports:
+      - "9092:9092"   # external
+      - "9094:9094"   # internal listener for other containers
+    environment:
+      # KRaft
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,INTERNAL://:9094"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,INTERNAL://kafka:9094"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - samato-kafkadata:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ─── Schema Registry (for Avro / Protobuf payloads) ─────────────
+  schema-registry:
+    image: bitnami/schema-registry:7.6
+    container_name: samato-schema-registry
+    ports: ["8085:8081"]
+    environment:
+      SCHEMA_REGISTRY_KAFKA_BOOTSTRAP_SERVERS: "kafka:9094"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+    depends_on:
+      kafka: { condition: service_healthy }
+
+  # ─── Redis (cache, distributed locks, rate limit) ───────────────
+  redis:
+    image: redis:7-alpine
+    container_name: samato-redis
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - samato-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Zipkin (distributed tracing) ───────────────────────────────
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: samato-zipkin
+    ports: ["9411:9411"]
+    environment:
+      # Store traces in Postgres so they survive restarts
+      STORAGE_TYPE: jdbc
+      JDBC_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fd_shared
+      JDBC_DATASOURCE_USERNAME: fd
+      JDBC_DATASOURCE_PASSWORD: fd
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # ─── Prometheus (metrics) ───────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: samato-prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - samato-promdata:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+
+  # ─── Grafana (dashboards) ───────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: samato-grafana
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - samato-grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+  # ─── Keycloak (dev identity provider, replacable by Spring Auth Server later) ─
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: samato-keycloak
+    command: ["start-dev", "--http-port=9080", "--http-relative-path=/auth"]
+    ports: ["9080:9080"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: dev-mem  # in-memory; will swap to Postgres in prod
+    profiles: ["auth"]
+
+  # ─── OpenSearch (search service, Phase 3) ───────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: samato-opensearch
+    ports: ["9200:9200"]
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      "OPENSEARCH_JAVA_OPTS": "-Xms512m -Xmx512m"
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - samato-osdata:/usr/share/opensearch/data
+
+  # ─── Kafka UI (dev-only, for inspecting topics/messages) ────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: samato-kafka-ui
+    ports: ["8081:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: samato
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9094
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    depends_on:
+      kafka: { condition: service_healthy }
+      schema-registry: { condition: service_started }
+
+  # ─── Order service (Phase 4: Saga orchestrator) ──────────────────
+  order-service:
+    build:
+      context: ..
+      dockerfile: services/order-service/Dockerfile
+    container_name: samato-order-service
+    ports: ["8083:8083"]
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/order_service
+      POSTGRES_USER: fd
+      POSTGRES_PASSWORD: fd
+      AUTH_JWKS_URI: http://auth-service:9000/.well-known/jwks.json
+      KAFKA_BOOTSTRAP: kafka:9094
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      redis: { condition: service_started }
+      opensearch: { condition: service_started }
+    networks: [samato-net]
+
+  # ─── Payment service (Phase 5: Razorpay + event-sourced ledger) ─
+  payment-service:
+    build:
+      context: ..
+      dockerfile: services/payment-service/Dockerfile
+    container_name: samato-payment-service
+    ports: ["8084:8084"]
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/payment_service
+      POSTGRES_USER: fd
+      POSTGRES_PASSWORD: fd
+      AUTH_JWKS_URI: http://auth-service:9000/.well-known/jwks.json
+      KAFKA_BOOTSTRAP: kafka:9094
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+      # Razorpay test-mode keys. In real life these come from a secrets
+      # manager (AWS Secrets Manager, Vault). The placeholders below
+      # are the SDK's default; replace via env or config-server.
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:rzp_test_xxxxxxxxxxxxxx}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:placeholder_secret_xxxxxxxxxxxxxx}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:placeholder_webhook_secret_xxxxxxxx}
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    networks: [samato-net]
+
+volumes:
+  samato-pgdata:
+  samato-kafkadata:
+  samato-redisdata:
+  samato-promdata:
+  samato-grafanadata:
+  samato-osdata:
+
+networks:
+  default:
+    name: samato-net
