@@ -10,6 +10,19 @@ The bible has 9 Spring Boot services backed by PostgreSQL, Kafka, Redis, OpenSea
 
 ---
 
+## New here? Start with the Postman walkthrough
+
+> **If you've never used Postman, microservices, JWT, or event sourcing, jump to the beginner Postman walkthrough first.** It's a click-by-click guide that takes you from "I just opened Postman" to "the saga completed and the payment is captured" in 12 numbered steps, with copy-pasteable request bodies and expected responses.
+>
+> - **[`docs/POSTMAN-WALKTHROUGH.md`](docs/POSTMAN-WALKTHROUGH.md)** — the 12-step happy path (register → login → restaurant → menu → order → saga → payment)
+> - **[`docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md`](docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md)** — pre-flight health check + symptom-based troubleshooting
+> - **[`docs/POSTMAN-ENDPOINT-MAP.md`](docs/POSTMAN-ENDPOINT-MAP.md)** — every endpoint, every required role, every request/response shape
+> - **[`samato.postman_environment.json`](samato.postman_environment.json)** — importable Postman environment (23 variables)
+>
+> The rest of this document (sections 0–7) is the **operator's reference**: build, infra, runtime verification, Razorpay setup, observability. Read it once you're comfortable with the happy path.
+
+---
+
 ## 0. Prerequisites
 
 Install these once. All are required.
@@ -587,7 +600,59 @@ This is a fresh start. All data is lost.
 
 ---
 
+## 7.5. Test it from Postman (beginner-friendly path)
+
+If you prefer to *see* the system working rather than read about it, Postman is the fastest way. The deliverables below are designed for someone who has never used Postman before.
+
+### 7.5.1 What you get
+
+| File | What it is |
+|---|---|
+| **`samato.postman_environment.json`** | A Postman environment with 23 pre-set variables (`baseUrl`, `directAuthUrl`, `directUserUrl`, `directRestaurantUrl`, `directOrderUrl`, `directPaymentUrl`, `directSearchUrl`, `jwt`, `jwtOwner`, `restaurantId`, `orderId`, etc.). Import once, reuse for every request. |
+| **`docs/POSTMAN-WALKTHROUGH.md`** | The 12-step click-by-click guide. Every step has the exact URL, exact request body, expected response, and a "what to save from this response" callout. |
+| **`docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md`** | Pre-flight: 60-second health check that confirms all 9 services are reachable. Then 15 ranked symptoms with single-command fixes (no "you could try X or Y" — one thing at a time). |
+| **`docs/POSTMAN-ENDPOINT-MAP.md`** | Reference: every endpoint, every required role, every request/response shape, every variable the walkthrough sets. Use this as a checklist, not as a teaching doc. |
+
+### 7.5.2 The 60-second version
+
+1. **Import the environment:** in Postman, click **Import** → drag in `samato.postman_environment.json`. You should see 23 variables on the right rail.
+2. **Pre-flight:** open `docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md` and run the "60-second health check" block. You should see 9/9 services reporting UP.
+3. **Walk the 12 steps:** open `docs/POSTMAN-WALKTHROUGH.md` and start at "Step 1: Register the customer". Each step has copy-pasteable JSON and an expected response.
+4. **Tick the verification checklist** at the bottom of the walkthrough.
+
+### 7.5.3 What you should know before you start
+
+- **Call services directly, not through the gateway.** The gateway's `stripPrefix(1)` config strips `/api` from the path, but every downstream controller is mounted at `/api/<svc>/...`. Going through `http://localhost:8080` returns 404 for everything except the actuator. The walkthrough uses `directAuthUrl`, `directUserUrl`, etc. — direct service ports, no gateway.
+- **Login is `POST /oauth2/token`, not `POST /api/auth/login`.** The bible uses Spring Authorization Server's standard password grant. HTTP Basic auth with the OAuth2 client (`api-gateway` / `gateway-secret-please-rotate`) + a form body with `username`, `password`, `grant_type=password`. The OAuth2 client credentials are pre-set in the env file as `oauthClientId` and `oauthClientSecret`.
+- **RESTAURANT_OWNER role is not exposed via `/api/auth/register`.** Registration only creates CUSTOMER users. To create a restaurant owner, run the dev seeder (`infra/postgres/seed-bob.sql` or similar) or insert directly into the auth DB. The walkthrough documents the exact SQL.
+- **The 9 Spring Boot services are not all dockerized.** Only `order-service` and `payment-service` are in `infra/docker-compose.yml`. The other 7 (config, discovery, auth, user, restaurant, search, api-gateway) are run as standalone apps via `mvn spring-boot:run` or the built JAR. Section 4 below covers the exact commands.
+
+### 7.5.4 Port reference (one place, all ports)
+
+| Service | Port | What it does |
+|---|---|---|
+| api-gateway | 8080 | Front door (currently broken for `/api/*` routes — see above) |
+| auth-service | 9000 | Login, register, JWKS, /me — call this directly |
+| config-service | 8888 | Externalized config (Spring Cloud Config Server) |
+| discovery-service | 8761 | Eureka registry |
+| user-service | 8081 | Customer / driver / restaurant-owner profiles |
+| restaurant-service | 8082 | Restaurants + menu items |
+| order-service | 8083 | Order placement + saga orchestrator |
+| payment-service | 8084 | Razorpay integration + event-sourced ledger |
+| search-service | 8087 | OpenSearch-backed full-text search |
+| *(host)* schema-registry | 8085 | Confluent Schema Registry (NOT a Samato service) — host port maps to container 8081 |
+
+These are sourced directly from `services/*/src/main/resources/application.yml`. If you override a port via env var or config-server, the walkthrough will be wrong — see `[VERIFY]` notes in the endpoint map.
+
+### 7.5.5 If something doesn't work
+
+Open `docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md` Part 2. Pick the symptom that matches what you see in Postman. The first thing to try is a single copy-pasteable command. If it doesn't fix it, the next thing is also a single command. If even that doesn't fix it, the doc tells you exactly what to share with Claude for debugging.
+
+---
+
 ## 8. The minimum viable run (TL;DR)
+
+> **Beginner?** Skip to **section 7.5** first — it has the Postman walkthrough and pre-flight checks.
 
 If you just want to see *something* run:
 
@@ -596,7 +661,7 @@ If you just want to see *something* run:
 3. `cd infra && docker compose up -d`
 4. Wait 90 seconds
 5. `curl http://localhost:8761` — Eureka is up
-6. Register, login, place an order, watch the saga in `docker logs samato-order-service`
+6. Import `samato.postman_environment.json` into Postman, then follow `docs/POSTMAN-WALKTHROUGH.md` for the 12-step happy path
 
 That's the path. The Razorpay end-to-end money flow is a separate session of work (section 6) and requires real test keys.
 
@@ -615,8 +680,14 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 | Webhook signature verification | Code verified to compile against the real `com.razorpay.Utils.verifyWebhookSignature`; runtime path is unverified |
 | Time-travel queries | **Unverified** — endpoint exists, replay logic present |
 | Event-sourced replay produces identical state | **Unverified** — code reviewed but no test run yet |
+| `docs/POSTMAN-WALKTHROUGH.md` (12-step happy path) | **Documented, runtime not yet exercised** — 754 lines, copy-pasteable JSON, gateway-bypass workaround documented |
+| `docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md` (health check + symptoms) | **Documented, runtime not yet exercised** — 610 lines, 15 symptoms, 13 docker-log hints |
+| `docs/POSTMAN-ENDPOINT-MAP.md` (endpoint inventory) | **Documented** — 30 KB, 9 services walked, `[VERIFY]` notes for uncertain fields |
+| `samato.postman_environment.json` (Postman env) | **Documented** — 23 variables, importable, OAuth2 client creds pre-set |
 
-**Treat this guide as a starting point, not a guarantee.** The build now succeeds (section 1.1 is verified). What's unverified is the runtime: bringing Docker up, exercising the saga, and watching the Razorpay webhook flip the payment state. When a service won't start, share `docker logs` and we'll trace it.
+**Treat this guide as a starting point, not a guarantee.** The build now succeeds (section 1.1 is verified). What's unverified is the runtime: bringing Docker up, exercising the saga, and watching the Razorpay webhook flip the payment state. The Postman walkthrough is also a written document, not a runtime-exercised guide — the JSON examples are sourced from the controller code and should be field-name-accurate, but the exact UUIDs, order IDs, and timing windows will only be confirmed when the stack is actually running end-to-end.
+
+**When the runtime path is finally verified, update this table** — every "[VERIFY]" tag in the endpoint map should be replaced with "verified", and the runtime column should flip from "Unverified" to "Verified". The Postman walkthrough is the most likely path to surface the first real bug.
 
 ---
 
@@ -627,6 +698,10 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 - `PROJECT-STATUS.md` — what's done and what's pending
 - `services/*/docs/INTERVIEW-NOTES.md` — designer notes per service (the *why*)
 - `services/payment-service/docs/INTERVIEW-NOTES.md` — the payment service deep-dive
+- **`docs/POSTMAN-WALKTHROUGH.md`** — beginner-friendly 12-step Postman walkthrough (start here)
+- **`docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md`** — pre-flight health check + symptom-based troubleshooting
+- **`docs/POSTMAN-ENDPOINT-MAP.md`** — every endpoint, role, request/response shape
+- **`samato.postman_environment.json`** — importable Postman environment (23 variables)
 
 ---
 
