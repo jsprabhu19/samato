@@ -1,0 +1,291 @@
+[
+  {
+    "name": "02 — Restaurant Owner",
+    "item": [
+      {
+        "name": "Create restaurant",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "Authorization", "value": "Bearer {{jwtOwner}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants"]
+          },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"name\":\"Biryani Blues\",\"description\":\"Authentic Hyderabadi biryani\",\"cuisine\":\"Indian\",\"address\":\"12 MG Road\",\"city\":\"Bangalore\",\"latitude\":12.9716,\"longitude\":77.5946}",
+            "options": { "raw": { "language": "json" } }
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.id) {",
+                "    pm.collectionVariables.set('restaurantId', json.id);",
+                "    console.log('Captured restaurantId = ' + json.id);",
+                "}",
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get restaurant",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwtOwner}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants", "{{restaurantId}}"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Add menu item 1 (Chicken Biryani)",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "Authorization", "value": "Bearer {{jwtOwner}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants", "{{restaurantId}}", "menu"]
+          },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"name\":\"Chicken Biryani\",\"description\":\"Slow-cooked with saffron\",\"price\":\"350.00\"}",
+            "options": { "raw": { "language": "json" } }
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.id) {",
+                "    pm.collectionVariables.set('menuItemId', json.id);",
+                "    console.log('Captured menuItemId = ' + json.id);",
+                "}",
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Add menu item 2 (Paneer Tikka)",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" },
+            { "key": "Authorization", "value": "Bearer {{jwtOwner}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants", "{{restaurantId}}", "menu"]
+          },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"name\":\"Paneer Tikka\",\"description\":\"Tandoor-grilled\",\"price\":\"280.00\"}",
+            "options": { "raw": { "language": "json" } }
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.id) {",
+                "    pm.collectionVariables.set('menuItemId2', json.id);",
+                "    console.log('Captured menuItemId2 = ' + json.id);",
+                "}",
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get menu",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwtOwner}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants", "{{restaurantId}}", "menu"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});",
+                "const items = pm.response.json();",
+                "console.log('Menu items: ' + JSON.stringify(items));"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "03 — Customer",
+    "item": [
+      {
+        "name": "Get my profile",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwt}}" }
+          ],
+          "url": {
+            "raw": "{{directUserUrl}}/api/users/me",
+            "host": ["{{directUserUrl}}"],
+            "path": ["api", "users", "me"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Search restaurants by city",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwt}}" }
+          ],
+          "url": {
+            "raw": "{{directSearchUrl}}/api/search/restaurants?city=Bangalore",
+            "host": ["{{directSearchUrl}}"],
+            "path": ["api", "search", "restaurants"],
+            "query": [
+              { "key": "city", "value": "Bangalore" }
+            ]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});",
+                "const json = pm.response.json();",
+                "console.log('Total search hits: ' + (json.total !== undefined ? json.total : 'n/a'));"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Search restaurants by cuisine",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwt}}" }
+          ],
+          "url": {
+            "raw": "{{directSearchUrl}}/api/search/restaurants?cuisine=Indian",
+            "host": ["{{directSearchUrl}}"],
+            "path": ["api", "search", "restaurants"],
+            "query": [
+              { "key": "cuisine", "value": "Indian" }
+            ]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get menu before ordering",
+        "request": {
+          "method": "GET",
+          "header": [
+            { "key": "Authorization", "value": "Bearer {{jwt}}" }
+          ],
+          "url": {
+            "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+            "host": ["{{directRestaurantUrl}}"],
+            "path": ["api", "restaurants", "{{restaurantId}}", "menu"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 2xx', () => {",
+                "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                "});",
+                "const items = pm.response.json();",
+                "console.log('Menu items: ' + JSON.stringify(items));"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

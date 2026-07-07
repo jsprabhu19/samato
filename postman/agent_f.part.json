@@ -1,0 +1,226 @@
+[
+  {
+    "name": "04 — Order Placement",
+    "item": [
+      {
+        "name": "Place order",
+        "request": {
+          "method": "POST",
+          "header": [
+            { "key": "Content-Type", "value": "application/json" }
+          ],
+          "url": {
+            "raw": "{{directOrderUrl}}/api/orders",
+            "host": ["{{directOrderUrl}}"],
+            "path": ["api", "orders"]
+          },
+          "body": {
+            "mode": "raw",
+            "raw": "{\"restaurantId\":\"{{restaurantId}}\",\"items\":[{\"menuItemId\":\"{{menuItemId}}\",\"quantity\":2}],\"notes\":\"Extra spicy\"}",
+            "options": { "raw": { "language": "json" } }
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.id) { pm.collectionVariables.set('orderId', json.id); console.log('Captured orderId = ' + json.id); }",
+                "if (json.sagaId) { pm.collectionVariables.set('sagaId', json.sagaId); console.log('Captured sagaId = ' + json.sagaId); }",
+                "pm.test('status is 201 Created', () => { pm.expect(pm.response.code).to.eql(201); });"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get order",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directOrderUrl}}/api/orders/{{orderId}}",
+            "host": ["{{directOrderUrl}}"],
+            "path": ["api", "orders", "{{orderId}}"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "console.log('Order status: ' + json.status);",
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "List my orders",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directOrderUrl}}/api/orders",
+            "host": ["{{directOrderUrl}}"],
+            "path": ["api", "orders"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "console.log('My order count: ' + (Array.isArray(json) ? json.length : 'n/a'));",
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "05 — Saga Inspection",
+    "item": [
+      {
+        "name": "Get saga for order",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directOrderUrl}}/api/orders/{{orderId}}/saga",
+            "host": ["{{directOrderUrl}}"],
+            "path": ["api", "orders", "{{orderId}}", "saga"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "console.log('Saga currentStepIndex: ' + json.currentStepIndex);",
+                "if (Array.isArray(json.steps)) {",
+                "    json.steps.forEach(function(s) { console.log('  step[' + s.index + '] type=' + s.type + ' status=' + s.status); });",
+                "}",
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Poll saga (with delay)",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directOrderUrl}}/api/orders/{{orderId}}/saga",
+            "host": ["{{directOrderUrl}}"],
+            "path": ["api", "orders", "{{orderId}}", "saga"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('saga progresses (wait 3s first)', function (done) {",
+                "    setTimeout(function() {",
+                "        const json = pm.response.json();",
+                "        pm.expect(json.status).to.exist;",
+                "        console.log('Saga status: ' + json.status + ', step: ' + json.currentStepIndex);",
+                "        done();",
+                "    }, 3000);",
+                "});"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "06 — Payment Inspection",
+    "item": [
+      {
+        "name": "Get payment by order",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directPaymentUrl}}/api/payments/by-order/{{orderId}}",
+            "host": ["{{directPaymentUrl}}"],
+            "path": ["api", "payments", "by-order", "{{orderId}}"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "if (json.paymentId) { pm.collectionVariables.set('paymentId', json.paymentId); console.log('Captured paymentId = ' + json.paymentId); }",
+                "if (json.razorpayOrderId) { pm.collectionVariables.set('razorpayOrderId', json.razorpayOrderId); }",
+                "console.log('razorpayOrderId: ' + json.razorpayOrderId + ', status: ' + json.status);",
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get payment by id",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directPaymentUrl}}/api/payments/{{paymentId}}",
+            "host": ["{{directPaymentUrl}}"],
+            "path": ["api", "payments", "{{paymentId}}"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "Get payment events",
+        "request": {
+          "method": "GET",
+          "header": [],
+          "url": {
+            "raw": "{{directPaymentUrl}}/api/payments/{{paymentId}}/events",
+            "host": ["{{directPaymentUrl}}"],
+            "path": ["api", "payments", "{{paymentId}}", "events"]
+          }
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const json = pm.response.json();",
+                "const count = Array.isArray(json) ? json.length : 0;",
+                "console.log('Payment event count: ' + count);",
+                "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

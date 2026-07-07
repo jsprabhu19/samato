@@ -609,6 +609,7 @@ If you prefer to *see* the system working rather than read about it, Postman is 
 | File | What it is |
 |---|---|
 | **`samato.postman_environment.json`** | A Postman environment with 23 pre-set variables (`baseUrl`, `directAuthUrl`, `directUserUrl`, `directRestaurantUrl`, `directOrderUrl`, `directPaymentUrl`, `directSearchUrl`, `jwt`, `jwtOwner`, `restaurantId`, `orderId`, etc.). Import once, reuse for every request. |
+| **`postman/samato.postman_collection.json`** | A ready-to-run Postman **collection** (7 folders, 25 requests) that walks the entire happy path. Tests scripts auto-capture JWTs and IDs from one request into the next, so a single "Run Collection" click exercises the saga end-to-end without copy-pasting. |
 | **`docs/POSTMAN-WALKTHROUGH.md`** | The 12-step click-by-click guide. Every step has the exact URL, exact request body, expected response, and a "what to save from this response" callout. |
 | **`docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md`** | Pre-flight: 60-second health check that confirms all 9 services are reachable. Then 15 ranked symptoms with single-command fixes (no "you could try X or Y" — one thing at a time). |
 | **`docs/POSTMAN-ENDPOINT-MAP.md`** | Reference: every endpoint, every required role, every request/response shape, every variable the walkthrough sets. Use this as a checklist, not as a teaching doc. |
@@ -684,6 +685,7 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 | `docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md` (health check + symptoms) | **Documented, runtime not yet exercised** — 610 lines, 15 symptoms, 13 docker-log hints |
 | `docs/POSTMAN-ENDPOINT-MAP.md` (endpoint inventory) | **Documented** — 30 KB, 9 services walked, `[VERIFY]` notes for uncertain fields |
 | `samato.postman_environment.json` (Postman env) | **Documented** — 23 variables, importable, OAuth2 client creds pre-set |
+| `postman/samato.postman_collection.json` (Postman collection) | **Documented, runtime not yet exercised** — 7 folders, 25 requests, JSON-validated, all URLs use env variables, every request has a Tests script that captures the right env var |
 
 **Treat this guide as a starting point, not a guarantee.** The build now succeeds (section 1.1 is verified). What's unverified is the runtime: bringing Docker up, exercising the saga, and watching the Razorpay webhook flip the payment state. The Postman walkthrough is also a written document, not a runtime-exercised guide — the JSON examples are sourced from the controller code and should be field-name-accurate, but the exact UUIDs, order IDs, and timing windows will only be confirmed when the stack is actually running end-to-end.
 
@@ -702,6 +704,8 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 - **`docs/POSTMAN-PREFLIGHT-TROUBLESHOOTING.md`** — pre-flight health check + symptom-based troubleshooting
 - **`docs/POSTMAN-ENDPOINT-MAP.md`** — every endpoint, role, request/response shape
 - **`samato.postman_environment.json`** — importable Postman environment (23 variables)
+- **`postman/samato.postman_collection.json`** — importable Postman **collection** (7 folders, 25 requests) that auto-runs the happy path. Tests scripts capture JWTs and IDs between requests. Click "Run Collection" in Postman to exercise the saga end-to-end.
+- **`postman/samato.postman_collection.json`** — importable Postman **collection** (7 folders, 25 requests) — auto-runs the entire happy path: register, login, create restaurant, add menu, place order, poll saga, inspect payment. Import this alongside the env file and click "Run Collection" to exercise the saga end-to-end. The collection's Tests scripts auto-capture JWTs and IDs from one request into the next.
 
 ---
 

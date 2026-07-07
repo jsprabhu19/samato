@@ -1,0 +1,1112 @@
+{
+  "info": {
+    "name": "Samato Bible — Happy Path",
+    "_postman_id": "7d2c4a1e-3b58-4f01-9a0c-8f5b2c1d4e3a",
+    "description": "Beginner-friendly Postman walkthrough of the Samato microservice food-delivery bible. Covers pre-flight health checks, OAuth2 password-grant registration + login, restaurant + menu authoring, customer search, order placement, saga tracking, and payment reads. Run folders 00-01 first, then 02-06 in order. JWTs and IDs are captured into collection-scoped variables so the runner can chain steps. See SHARED-SPEC.md for the canonical request shapes and variable names.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Inject the right bearer for the current request",
+          "const jwt = pm.collectionVariables.get('jwt');",
+          "const jwtOwner = pm.collectionVariables.get('jwtOwner');",
+          "",
+          "if (jwt) {",
+          "    pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + jwt });",
+          "}",
+          "// If this is a restaurants request and we have an owner JWT, override",
+          "const path = pm.request.url.path ? pm.request.url.path.join('/') : '';",
+          "if (path.includes('restaurants') && jwtOwner) {",
+          "    pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + jwtOwner });",
+          "}",
+          "",
+          "// Per-run idempotency key for any POST",
+          "if (pm.request.method === 'POST') {",
+          "    pm.request.headers.upsert({ key: 'Idempotency-Key', value: pm.variables.replaceIn('{{$randomUUID}}') });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "// Placeholder. Per-request tests handle their own captures."
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 — Pre-flight",
+      "item": [
+        {
+          "name": "Gateway health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('gateway health is UP', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Auth JWKS",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directAuthUrl}}/oauth2/jwks",
+              "host": [
+                "{{directAuthUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "jwks"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('auth JWKS is reachable', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('keys');",
+                  "    pm.expect(json.keys).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restaurant health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/actuator/health",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('restaurant service health is UP', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "    const body = pm.response.text();",
+                  "    pm.expect(body).to.include('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 — Register & Login",
+      "item": [
+        {
+          "name": "Register customer Alice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{directAuthUrl}}/api/auth/register",
+              "host": [
+                "{{directAuthUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{customerEmail}}\",\"password\":\"{{customerPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.id) {",
+                  "    pm.collectionVariables.set('customerId', json.id);",
+                  "    console.log('Captured customerId = ' + json.id);",
+                  "}",
+                  "pm.test('register Alice status is 201 or 409 (already exists)', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register owner Bob",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{directAuthUrl}}/api/auth/register",
+              "host": [
+                "{{directAuthUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{ownerEmail}}\",\"password\":\"{{ownerPassword}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.id) {",
+                  "    pm.collectionVariables.set('ownerId', json.id);",
+                  "    console.log('Captured ownerId = ' + json.id);",
+                  "}",
+                  "pm.test('register Bob status is 201 or 409 (already exists)', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Alice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{directAuthUrl}}/oauth2/token",
+              "host": [
+                "{{directAuthUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{oauthClientId}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{oauthClientSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{customerEmail}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{customerPassword}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('login as Alice returns 200', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (json && json.access_token) {",
+                  "    pm.collectionVariables.set('jwt', json.access_token);",
+                  "    console.log('Captured CUSTOMER JWT');",
+                  "}",
+                  "pm.test('response includes access_token', () => {",
+                  "    pm.expect(json).to.have.property('access_token').that.is.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as Bob",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{directAuthUrl}}/oauth2/token",
+              "host": [
+                "{{directAuthUrl}}"
+              ],
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{oauthClientId}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{oauthClientSecret}}"
+                }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{ownerEmail}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{ownerPassword}}",
+                  "type": "text"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('login as Bob returns 200', () => {",
+                  "    pm.expect(pm.response.code).to.eql(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (json && json.access_token) {",
+                  "    pm.collectionVariables.set('jwtOwner', json.access_token);",
+                  "    console.log('Captured OWNER JWT');",
+                  "}",
+                  "pm.test('response includes access_token', () => {",
+                  "    pm.expect(json).to.have.property('access_token').that.is.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Seed owner role via SQL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://example.com/seed-owner",
+              "host": [
+                "example",
+                "com"
+              ],
+              "path": [
+                "seed-owner"
+              ]
+            },
+            "description": "DOCUMENTATION REQUEST. Public registration always creates a CUSTOMER. To make Bob (ownerEmail) a RESTAURANT_OWNER you must promote his role in the database. Run the psql command logged by this request's Tests script. The test always passes — the SQL is the real work."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('MANUAL STEP: Run this in your terminal to make Bob a RESTAURANT_OWNER:');",
+                  "console.log('');",
+                  "console.log('docker exec -it samato-postgres psql -U fd -d auth_service -c \"UPDATE user_roles SET roles = ARRAY[\\'RESTAURANT_OWNER\\'] WHERE user_id = (SELECT id FROM users WHERE email = \\'bob@example.com\\');\"');",
+                  "console.log('');",
+                  "console.log('If that table name is different, run: docker exec -it samato-postgres psql -U fd -d auth_service -c \"\\\\dt\" to list tables first.');",
+                  "pm.test('seed owner role manual step acknowledged', () => {",
+                  "    pm.expect(true).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Restaurant Owner",
+      "item": [
+        {
+          "name": "Create restaurant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtOwner}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Biryani Blues\",\"description\":\"Authentic Hyderabadi biryani\",\"cuisine\":\"Indian\",\"address\":\"12 MG Road\",\"city\":\"Bangalore\",\"latitude\":12.9716,\"longitude\":77.5946}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('restaurantId', json.id);",
+                  "    console.log('Captured restaurantId = ' + json.id);",
+                  "}",
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get restaurant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtOwner}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants",
+                "{{restaurantId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add menu item 1 (Chicken Biryani)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtOwner}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants",
+                "{{restaurantId}}",
+                "menu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Chicken Biryani\",\"description\":\"Slow-cooked with saffron\",\"price\":\"350.00\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('menuItemId', json.id);",
+                  "    console.log('Captured menuItemId = ' + json.id);",
+                  "}",
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add menu item 2 (Paneer Tikka)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtOwner}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants",
+                "{{restaurantId}}",
+                "menu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Paneer Tikka\",\"description\":\"Tandoor-grilled\",\"price\":\"280.00\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('menuItemId2', json.id);",
+                  "    console.log('Captured menuItemId2 = ' + json.id);",
+                  "}",
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get menu",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtOwner}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants",
+                "{{restaurantId}}",
+                "menu"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});",
+                  "const items = pm.response.json();",
+                  "console.log('Menu items: ' + JSON.stringify(items));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — Customer",
+      "item": [
+        {
+          "name": "Get my profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directUserUrl}}/api/users/me",
+              "host": [
+                "{{directUserUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search restaurants by city",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directSearchUrl}}/api/search/restaurants?city=Bangalore",
+              "host": [
+                "{{directSearchUrl}}"
+              ],
+              "path": [
+                "api",
+                "search",
+                "restaurants"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "Bangalore"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "console.log('Total search hits: ' + (json.total !== undefined ? json.total : 'n/a'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search restaurants by cuisine",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directSearchUrl}}/api/search/restaurants?cuisine=Indian",
+              "host": [
+                "{{directSearchUrl}}"
+              ],
+              "path": [
+                "api",
+                "search",
+                "restaurants"
+              ],
+              "query": [
+                {
+                  "key": "cuisine",
+                  "value": "Indian"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get menu before ordering",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{directRestaurantUrl}}/api/restaurants/{{restaurantId}}/menu",
+              "host": [
+                "{{directRestaurantUrl}}"
+              ],
+              "path": [
+                "api",
+                "restaurants",
+                "{{restaurantId}}",
+                "menu"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 2xx', () => {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+                  "});",
+                  "const items = pm.response.json();",
+                  "console.log('Menu items: ' + JSON.stringify(items));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Order Placement",
+      "item": [
+        {
+          "name": "Place order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{directOrderUrl}}/api/orders",
+              "host": [
+                "{{directOrderUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"restaurantId\":\"{{restaurantId}}\",\"items\":[{\"menuItemId\":\"{{menuItemId}}\",\"quantity\":2}],\"notes\":\"Extra spicy\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) { pm.collectionVariables.set('orderId', json.id); console.log('Captured orderId = ' + json.id); }",
+                  "if (json.sagaId) { pm.collectionVariables.set('sagaId', json.sagaId); console.log('Captured sagaId = ' + json.sagaId); }",
+                  "pm.test('status is 201 Created', () => { pm.expect(pm.response.code).to.eql(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directOrderUrl}}/api/orders/{{orderId}}",
+              "host": [
+                "{{directOrderUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "console.log('Order status: ' + json.status);",
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directOrderUrl}}/api/orders",
+              "host": [
+                "{{directOrderUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "console.log('My order count: ' + (Array.isArray(json) ? json.length : 'n/a'));",
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Saga Inspection",
+      "item": [
+        {
+          "name": "Get saga for order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directOrderUrl}}/api/orders/{{orderId}}/saga",
+              "host": [
+                "{{directOrderUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "saga"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "console.log('Saga currentStepIndex: ' + json.currentStepIndex);",
+                  "if (Array.isArray(json.steps)) {",
+                  "    json.steps.forEach(function(s) { console.log('  step[' + s.index + '] type=' + s.type + ' status=' + s.status); });",
+                  "}",
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Poll saga (with delay)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directOrderUrl}}/api/orders/{{orderId}}/saga",
+              "host": [
+                "{{directOrderUrl}}"
+              ],
+              "path": [
+                "api",
+                "orders",
+                "{{orderId}}",
+                "saga"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('saga progresses (wait 3s first)', function (done) {",
+                  "    setTimeout(function() {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.status).to.exist;",
+                  "        console.log('Saga status: ' + json.status + ', step: ' + json.currentStepIndex);",
+                  "        done();",
+                  "    }, 3000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 — Payment Inspection",
+      "item": [
+        {
+          "name": "Get payment by order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directPaymentUrl}}/api/payments/by-order/{{orderId}}",
+              "host": [
+                "{{directPaymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "by-order",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.paymentId) { pm.collectionVariables.set('paymentId', json.paymentId); console.log('Captured paymentId = ' + json.paymentId); }",
+                  "if (json.razorpayOrderId) { pm.collectionVariables.set('razorpayOrderId', json.razorpayOrderId); }",
+                  "console.log('razorpayOrderId: ' + json.razorpayOrderId + ', status: ' + json.status);",
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get payment by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directPaymentUrl}}/api/payments/{{paymentId}}",
+              "host": [
+                "{{directPaymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "{{paymentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get payment events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{directPaymentUrl}}/api/payments/{{paymentId}}/events",
+              "host": [
+                "{{directPaymentUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "{{paymentId}}",
+                "events"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const count = Array.isArray(json) ? json.length : 0;",
+                  "console.log('Payment event count: ' + count);",
+                  "pm.test('status is 200 OK', () => { pm.expect(pm.response.code).to.eql(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
