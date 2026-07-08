@@ -33,7 +33,10 @@ public interface EventStoreEntryRepository extends JpaRepository<EventStoreEntry
     /**
      * The latest version of the aggregate. Used to compute the next
      * version on append (for optimistic concurrency).
+     *
+     * Returns 0 for a brand-new aggregate (no events yet), so the
+     * first event's version == 1 is accepted. Events are 1-indexed.
      */
-    @Query("SELECT COALESCE(MAX(e.version), -1) FROM EventStoreEntry e WHERE e.aggregateId = :aggregateId")
+    @Query("SELECT COALESCE(MAX(e.version), 0) FROM EventStoreEntry e WHERE e.aggregateId = :aggregateId")
     int findLatestVersion(UUID aggregateId);
 }

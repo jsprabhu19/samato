@@ -50,6 +50,10 @@ public class DevDataSeeder implements CommandLineRunner {
         seedUser("22222222-2222-2222-2222-222222222222", "bob@example.com",   Set.of(Role.RESTAURANT_OWNER));
         seedUser("33333333-3333-3333-3333-333333333333", "carol@example.com", Set.of(Role.DRIVER));
         seedUser("44444444-4444-4444-4444-444444444444", "dave@example.com",  Set.of(Role.ADMIN));
+        // Service-to-service account. Used by order-service's Feign
+        // calls in the saga poller thread (no per-request user token).
+        // ADMIN role gives it broad read access across services.
+        seedUser("55555555-5555-5555-5555-555555555555", "service@system",    Set.of(Role.ADMIN));
 
         seedClient("api-gateway",   "gateway-secret-please-rotate", null);
         seedClient("spa-client",    "spa-secret-please-rotate",     "http://localhost:5173/callback");
@@ -73,9 +77,27 @@ public class DevDataSeeder implements CommandLineRunner {
     }
 
     private void seedClient(String clientId, String secret, String redirectUri) {
-        if (clients.findByClientId(clientId).isPresent()) return;
+        // Same idempotency rule as seedUser: a client with a bad hash from
+        // a previous boot is treated as "needs re-seeding". We do that by
+        // detecting the legacy raw-secret form (no $2 prefix) and rewriting
+        // the row in place. This makes the seeder safe to run after
+        // a schema migration or a code fix that changed the encoding.
+        var existing = clients.findByClientId(clientId);
+        if (existing.isPresent()) {
+            OAuthClient row = existing.get();
+            String hash = row.getClientSecretHash();
+            if (hash != null && hash.startsWith("$2")) return;  // already a real BCrypt hash
+            // Otherwise: clear-text or corrupted — re-hash and overwrite
+            row.setClientSecretHash(encoder.encode(secret));
+            clients.save(row);
+            log.warn("Re-seeded OAuth client {} (was stored in legacy form)", clientId);
+            return;
+        }
         OAuthClient c = new OAuthClient();
         c.setClientId(clientId);
+        // Store a real BCrypt hash. The repository passes this verbatim
+        // (no prefix) so Spring's DelegatingPasswordEncoder delegates to
+        // BCryptPasswordEncoder.matches(rawInput, thisHash) — that works.
         c.setClientSecretHash(encoder.encode(secret));
         c.setRedirectUri(redirectUri);
         clients.save(c);

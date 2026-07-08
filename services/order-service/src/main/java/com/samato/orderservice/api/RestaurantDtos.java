@@ -25,7 +25,10 @@ public final class RestaurantDtos {
     public record RestaurantSummary(
             UUID id,
             String name,
-            boolean open,
+            // restaurant-service exposes this as "active" in its JSON
+            // (the entity column is `active`); the order saga treats
+            // active=true as "open for orders".
+            boolean active,
             String ownerId
     ) {}
 
@@ -37,8 +40,12 @@ public final class RestaurantDtos {
             int stock
     ) {}
 
+    /**
+     * restaurant-service's GET /api/restaurants/{id}/menu returns a
+     * plain List<MenuItem> (no wrapper). We mirror that exact shape
+     * so Jackson can deserialize without a custom deserializer.
+     */
     public record MenuResponse(
-            UUID restaurantId,
             List<MenuItem> items
     ) {}
 }

@@ -132,7 +132,10 @@ public class OrderService {
             // it client-side would let a malicious caller fake the total.
             order.addItem(oi);
         }
-        order.recomputeTotal();
+        // Don't recomputeTotal() here — items have no unit price yet. The
+        // saga's VALIDATE_ITEMS step pulls the server-side price from
+        // restaurant-service and sets order.totalAmount from the result.
+        // Calling recomputeTotal() now would NPE on getUnitPrice().
         Order saved = orderRepository.save(order);
         outbox.appendOrderPlaced(saved);
 

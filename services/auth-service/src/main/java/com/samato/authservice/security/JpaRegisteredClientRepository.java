@@ -58,9 +58,16 @@ public class JpaRegisteredClientRepository implements RegisteredClientRepository
     private RegisteredClient toRegisteredClient(OAuthClient c) {
         RegisteredClient.Builder b = RegisteredClient.withId(c.getId().toString())
                 .clientId(c.getClientId())
-                // Spring AS expects the SECRET in {noop} or {bcrypt} prefix form.
-                // We store BCrypt hashes; tell the framework to use BCrypt decoder.
-                .clientSecret("{bcrypt}" + c.getClientSecretHash())
+                // The DB column holds a real BCrypt hash ($2a$...). Pass it
+                // verbatim — DelegatingPasswordEncoder detects the $2a$
+                // prefix and uses BCryptPasswordEncoder to compare the
+                // presented secret against the stored hash.
+                //
+                // (Earlier code prepended "{bcrypt}" which caused
+                // double-encoding: the framework would call
+                // BCryptPasswordEncoder.matches(rawInput, rawInput) which
+                // fails the "looks like BCrypt" check on the raw side.)
+                .clientSecret(c.getClientSecretHash())
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
                 .authorizationGrantType(AuthorizationGrantType.PASSWORD)

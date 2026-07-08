@@ -226,6 +226,11 @@ services:
       # and Kubernetes would never route traffic to us.
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # JWKS URI is read via @Value in JwtConfig — env override
+      # is required because the bean's default value points at
+      # localhost:9000, which inside the gateway container would be
+      # the gateway itself.
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:9000/.well-known/jwks.json
     depends_on:
       discovery-service: { condition: service_started }
       auth-service: { condition: service_started }

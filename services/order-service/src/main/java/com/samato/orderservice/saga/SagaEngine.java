@@ -202,7 +202,11 @@ public class SagaEngine {
         if (restaurant == null) {
             throw new IllegalStateException("Restaurant not found: " + order.getRestaurantId());
         }
-        if (!restaurant.open()) {
+        // The restaurant-service exposes `active` (deactivated vs not).
+        // The saga treats active=true as "open for orders" — there is no
+        // separate open/closed flag in Phase 4; that's a Phase 8 feature
+        // (business hours, holidays, etc.).
+        if (!restaurant.active()) {
             throw new IllegalStateException("Restaurant is closed: " + restaurant.name());
         }
         return writeJson(Map.of(

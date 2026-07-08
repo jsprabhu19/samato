@@ -70,6 +70,13 @@ public class AuthServerConfig {
         http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
                 .oidc(org.springframework.security.config.Customizer.withDefaults());
 
+        // Restrict the order-1 chain to OAuth2 / OIDC endpoints only.
+        // Without this matcher the chain would run for every request
+        // (including /.well-known/jwks.json, which the default chain
+        // would otherwise permit). Spring AS handles its own paths;
+        // everything else falls through to defaultSecurityFilterChain.
+        http.securityMatcher("/oauth2/**", "/.well-known/openid-configuration");
+
         http
                 // Reject unauthenticated requests to AS endpoints with 401,
                 // not the default HTML login page (REST convention).
@@ -92,7 +99,9 @@ public class AuthServerConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/register",
-                                "/api/auth/.well-known/**", "/actuator/**").permitAll()
+                                "/api/auth/dev-token",
+                                "/.well-known/**",
+                                "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(s -> s.sessionCreationPolicy(

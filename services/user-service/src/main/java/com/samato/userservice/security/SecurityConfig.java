@@ -57,10 +57,9 @@ public class SecurityConfig {
      * (new `kid`), it'll be picked up automatically.
      */
     @Bean
-    public JwtDecoder jwtDecoder() {
-        return NimbusJwtDecoder
-                .withJwkSetUri("http://localhost:9000/.well-known/jwks.json")
-                .build();
+    public JwtDecoder jwtDecoder(
+            @org.springframework.beans.factory.annotation.Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 
     /**

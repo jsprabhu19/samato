@@ -65,6 +65,7 @@ public class OutboxPublisher {
 
     public void appendOrderPlaced(Order order) {
         OrderPlacedEvent event = OrderPlacedEvent.newBuilder()
+                .setEventId(UUID.randomUUID().toString())
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
                 .setRestaurantId(order.getRestaurantId().toString())
@@ -78,6 +79,7 @@ public class OutboxPublisher {
 
     public void appendOrderConfirmed(Order order) {
         OrderConfirmedEvent event = OrderConfirmedEvent.newBuilder()
+                .setEventId(UUID.randomUUID().toString())
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
                 .setRestaurantId(order.getRestaurantId().toString())
@@ -93,6 +95,7 @@ public class OutboxPublisher {
         // does NOT carry restaurantId — only orderId, customerId, reason.
         // The Java code must match the schema, since the schema is the wire contract.
         OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
+                .setEventId(UUID.randomUUID().toString())
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
                 .setReason(order.getCancellationReason() != null

@@ -65,9 +65,9 @@ This is the honest table. The repo on GitHub reflects what's *written*, not what
 | Docker images build | **Verified** | all 9 service images built via `docker compose build` |
 | Stack brings up on `docker compose up` | **Verified** | 18/18 containers running, 7/7 business services registered in Eureka, all 9 service /actuator/health return HTTP 200 |
 | Code-path smoke test | **Verified** | standalone SmokeTest.java passes 3/3: Avro encoding, outbox serialization, JWT round-trip |
-| Saga runs end-to-end | **Unverified** | Code path verified by smoke test; live POST /api/orders through the gateway not yet run |
-| Razorpay integration works | **Unverified** | Placeholder keys; real flow needs `rzp_test_*` from dashboard |
-| Webhook signature verification | **Unverified** | `WebhookSignatureVerifier` is written but never executed against a real Razorpay event |
+| Saga runs end-to-end | **Verified** (2026-07-08) | `POST /api/orders` via gateway → saga runs → `VALIDATE_RESTAURANT` → `VALIDATE_ITEMS` → `RESERVE_INVENTORY` → `CHARGE_PAYMENT` → real Razorpay order created; `payment.captured` webhook flips state to `CAPTURED`. Order-service `recomputeTotal()` NPE, missing Avro `eventId`, DTO field mismatches (`open` vs `active`, `MenuResponse` wrapper vs list), saga poller lacking service-account JWT, and NOT-NULL constraints on `OrderItem.name`/`unit_price` all fixed. |
+| Razorpay integration works | **Verified** (2026-07-08) | `infra/.env` holds test-mode keys (`rzp_test_…`); `RazorpayClientImpl.createOrder` does the real `orders.create` SDK call (the SDK's `Integer` amount needed a `Number.longValue()` fix) and returns a real Razorpay order id visible in the dashboard. |
+| Webhook signature verification | **Verified** (2026-07-08) | `scripts/simulate-razorpay-webhook.js` builds a Razorpay-shaped payload, HMAC-SHA256-signs with the webhook secret, POSTs to the zrok-fronted payment-service URL. The HMAC verify passes, the `payment.captured` event appends to the event store (version 2) and the read view shows `status=CAPTURED`. |
 | Time-travel queries | **Unverified** | Endpoint exists, replay logic present |
 | Tests pass | **N/A** | No tests exist; only Testcontainers scaffolding intent |
 | Cross-service Kafka events consumed | **Unverified** | `samato.payment.charged` is published, but no consumer wires `Order.PAID` yet (still Phase 6 work) |

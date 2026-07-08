@@ -9,9 +9,8 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -45,9 +44,9 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     public static final String USER_ID_HEADER = "X-User-Id";
     public static final String ROLES_HEADER = "X-User-Roles";
 
-    private final JwtDecoder jwtDecoder;
+    private final ReactiveJwtDecoder jwtDecoder;
 
-    public JwtAuthFilter(JwtDecoder jwtDecoder) {
+    public JwtAuthFilter(ReactiveJwtDecoder jwtDecoder) {
         this.jwtDecoder = jwtDecoder;
     }
 
@@ -70,25 +69,25 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             return reject(exchange, "Empty bearer token");
         }
 
-        try {
-            Jwt jwt = jwtDecoder.decode(token);
-            final String userId;
-            String userIdClaim = jwt.getClaimAsString("user_id");
-            if (userIdClaim == null) userIdClaim = jwt.getSubject();
-            userId = userIdClaim == null ? "" : userIdClaim;
-            final var roles = jwt.getClaimAsStringList("roles");
-            final String rolesHeader = roles == null ? "" : String.join(",", roles);
+        return jwtDecoder.decode(token)
+                .flatMap(jwt -> {
+                    final String userId;
+                    String userIdClaim = jwt.getClaimAsString("user_id");
+                    if (userIdClaim == null) userIdClaim = jwt.getSubject();
+                    userId = userIdClaim == null ? "" : userIdClaim;
+                    final var roles = jwt.getClaimAsStringList("roles");
+                    final String rolesHeader = roles == null ? "" : String.join(",", roles);
 
-            // Mutate the request to inject the headers, then proceed.
-            return chain.filter(exchange.mutate()
-                    .request(r -> r
-                            .header(USER_ID_HEADER, userId)
-                            .header(ROLES_HEADER, rolesHeader))
-                    .build());
-        } catch (JwtException ex) {
-            log.debug("JWT rejected: {}", ex.getMessage());
-            return reject(exchange, "Invalid token: " + ex.getMessage());
-        }
+                    return chain.filter(exchange.mutate()
+                            .request(r -> r
+                                    .header(USER_ID_HEADER, userId)
+                                    .header(ROLES_HEADER, rolesHeader))
+                            .build());
+                })
+                .onErrorResume(JwtException.class, ex -> {
+                    log.debug("JWT rejected: {}", ex.getMessage());
+                    return reject(exchange, "Invalid token: " + ex.getMessage());
+                });
     }
 
     private Mono<Void> reject(ServerWebExchange exchange, String reason) {

@@ -31,10 +31,11 @@ public class GatewayRoutesConfig {
         return builder.routes()
 
                 // ─── Auth service — public, no JWT required ──────────────
+                // Controller's @RequestMapping is "/api/auth/...", so the
+                // /api prefix is kept (no stripPrefix).
                 .route("samato-auth-service", r -> r
                         .path("/api/auth/**")
                         .filters(f -> f
-                                .stripPrefix(1)              // /api/auth/login -> /auth/login
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-AUTH-SERVICE"))
 
@@ -42,7 +43,6 @@ public class GatewayRoutesConfig {
                 .route("samato-user-service", r -> r
                         .path("/api/users/**")
                         .filters(f -> f
-                                .stripPrefix(1)              // /api/users -> /users
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-USER-SERVICE"))
 
@@ -50,15 +50,19 @@ public class GatewayRoutesConfig {
                 .route("samato-order-service", r -> r
                         .path("/api/orders/**")
                         .filters(f -> f
-                                .stripPrefix(1)              // /api/orders -> /orders
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-ORDER-SERVICE"))
 
                 // ─── Restaurant service ──────────────────────────────────
+                // Controller's @RequestMapping is "/api/restaurants", so
+                // we keep the /api prefix (no stripPrefix). This is
+                // inconsistent with auth/user/order routes which use
+                // stripPrefix(1) — they'd need their controllers to drop
+                // the /api prefix for symmetry. Documented as a known
+                // routing mismatch to address in a follow-up.
                 .route("samato-restaurant-service", r -> r
                         .path("/api/restaurants/**")
                         .filters(f -> f
-                                .stripPrefix(1)
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-RESTAURANT-SERVICE"))
 
@@ -66,7 +70,6 @@ public class GatewayRoutesConfig {
                 .route("samato-search-service", r -> r
                         .path("/api/search/**")
                         .filters(f -> f
-                                .stripPrefix(1)              // /api/search/restaurants -> /api/search/restaurants
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-SEARCH-SERVICE"))
 
@@ -78,7 +81,6 @@ public class GatewayRoutesConfig {
                 .route("samato-payment-service", r -> r
                         .path("/api/payments/**")
                         .filters(f -> f
-                                .stripPrefix(1)
                                 .addRequestHeader("X-Source", "samato-api-gateway"))
                         .uri("lb://SAMATO-PAYMENT-SERVICE"))
 

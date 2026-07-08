@@ -30,14 +30,19 @@ public class OrderItem {
     @Column(name = "menu_item_id", nullable = false, columnDefinition = "uuid")
     private UUID menuItemId;
 
-    @Column(nullable = false, length = 200)
+    // name and unitPrice are populated by the saga's VALIDATE_ITEMS step
+    // (it fetches the server-side price from restaurant-service). They are
+    // nullable until that step runs. We persist the order early so the
+    // saga can find it in a fresh transaction; the row is "incomplete"
+    // for the few hundred ms between persist and the first saga step.
+    @Column(length = 200)
     private String name;
 
     @Column(nullable = false)
     private int quantity;
 
     /** Price per unit, captured at order time. */
-    @Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
+    @Column(name = "unit_price", precision = 10, scale = 2)
     private BigDecimal unitPrice;
 
     @Column(name = "created_at", nullable = false, updatable = false)

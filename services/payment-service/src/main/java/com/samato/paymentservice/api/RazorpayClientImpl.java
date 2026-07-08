@@ -66,7 +66,12 @@ public class RazorpayClientImpl implements RazorpayClient {
             Order order = razorpay.orders.create(request);
             String orderId = order.get("id");
             String status = order.get("status");
-            long amount = order.get("amount");
+            // Razorpay's SDK returns amount as an Integer for orders < 2^31 paise
+            // (~20M INR) and as a Long for larger amounts. Use Number to cover
+            // both — older code did `long amount = order.get("amount")` and
+            // threw ClassCastException for the Integer case.
+            Number amountNum = order.get("amount");
+            long amount = amountNum.longValue();
             String ccy = order.get("currency");
 
             return new RazorpayOrderResult(orderId, receipt, amount, ccy, status);
