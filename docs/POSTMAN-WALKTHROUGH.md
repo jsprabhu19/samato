@@ -3,6 +3,8 @@
 > A click-by-click guide for a complete beginner. No Spring Boot, no Kafka,
 > no event sourcing. Just Postman buttons in the right order.
 
+> **Status (2026-07-08):** All steps in this walkthrough have been verified to the extent of code-path smoke tests. The live `POST /api/orders` through the gateway has not yet been exercised — that's the next step.
+
 ---
 
 ## Before you start
@@ -157,9 +159,9 @@ foreach ($p in $ports) {
 ```
 
 > **Port 8085 is intentionally NOT in this list** — it belongs to
-> `schema-registry` (a Kafka helper, not a Samato service). Port 8081 on
-> the host is `schema-registry`'s **container** port, not a Samato
-> service. Don't confuse the two.
+> `schema-registry` (a Kafka helper, not a Samato service). Port 8091 on
+> the host is `kafka-ui`'s port. Don't confuse these with Samato service
+> ports.
 
 ### Expected output
 
@@ -858,10 +860,10 @@ Every endpoint hit in this walkthrough, in order, for interview revision.
 | 8084 | payment-service | Docker container | Event-sourced payment ledger. |
 | 8087 | search-service | JVM (Terminal 6) | OpenSearch query for restaurants. |
 | 9200 | opensearch | Docker container | Search engine (used by search-service). |
-| 8085 | schema-registry | Docker container | **NOT a Samato service** — it's a Kafka helper. Port 8085 maps to container 8081, so don't confuse it with anything. |
+| 8085 | schema-registry | Docker container | **NOT a Samato service** — it's a Kafka helper for Avro schema storage. Don't confuse it with any Samato service port. |
 | 5432 | postgres | Docker container | All service databases. |
 | 9092 | kafka | Docker container | Event bus. |
 | 6379 | redis | Docker container | Cache / locks. |
 | 9411 | zipkin | Docker container | Distributed tracing UI (optional). |
 | 3000 | grafana | Docker container | Dashboards (admin / admin, optional). |
-| 8081 (kafka-ui) | kafka-ui | Docker container | Kafka topic browser (optional). |
+| 8091 | kafka-ui | Docker container | Kafka topic browser (optional). |

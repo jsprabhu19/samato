@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-SEARCH-SERVICE`.
+
+- **Port:** 8087
+- **Image:** samato-search-service:dev (compose tags it `search-service:latest`)
+- **Health:** `curl http://localhost:8087/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: added `spring.cloud.config.enabled: false`.
+
+---
+
 # Search Service — Interview Notes
 
 ## What it does (1 line)

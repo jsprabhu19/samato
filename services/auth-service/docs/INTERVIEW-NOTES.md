@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-AUTH-SERVICE`.
+
+- **Port:** 9000
+- **Image:** samato-auth-service:dev (compose tags it `auth-service:latest`)
+- **Health:** `curl http://localhost:9000/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: added `spring.cloud.config.enabled: false`, fixed `DevDataSeeder` to also check `existsByEmail` so re-runs don't crash on the duplicate-email constraint.
+
+---
+
 # Auth Service — Interview Notes
 
 ## What it does (1 line)

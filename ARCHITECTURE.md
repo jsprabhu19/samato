@@ -41,9 +41,13 @@ These are the containers that exist **today** in the repo.
 | samato-search-service | Spring Boot + OpenSearch + Redis | 8087 | Read model, search index, cache |
 | samato-order-service | Spring Boot + Postgres | 8083 | Order lifecycle + saga orchestrator |
 | samato-payment-service | Spring Boot + Postgres | 8084 | Event-sourced ledger, Razorpay integration |
-| Kafka | Apache Kafka + Schema Registry | 9092 | Async messaging, outbox fanout |
+| samato-schema-registry | Confluent Schema Registry (bitnamilegacy 7.6) | 8085 | Avro schema storage for Kafka payloads |
+| samato-search-service | Spring Boot + OpenSearch + Redis | 8087 | Read model, search index, cache |
+| Kafka | Apache Kafka (KRaft mode) | 9092 (external) / 9094 (internal) | Async messaging, outbox fanout |
+| samato-kafka-ui | provectuslabs/kafka-ui v0.7.2 | 8091 | Dev UI for inspecting topics/messages (note: 8091, not 8081 — 8081 is user-service) |
 | Postgres (per service) | PostgreSQL 16 | 5432 | One DB per service (see `infra/postgres/init-databases.sh`) |
 | Redis | Redis 7 | 6379 | Cache, rate-limit tokens, distributed locks |
+| OpenSearch | OpenSearch | 9200 | Search index for restaurant/search-service |
 | Zipkin | Zipkin | 9411 | Distributed tracing UI |
 | Prometheus | Prometheus | 9090 | Metrics scrape |
 | Grafana | Grafana | 3000 | Dashboards (admin / admin) |
@@ -68,18 +72,18 @@ The databases for these are already provisioned (`delivery_service`, `notificati
                        │   (Spring CG)   │
                        └────────┬────────┘
                                 │
-       ┌────────────┬───────────┼───────────┬─────────────┐
-       ▼            ▼           ▼           ▼             ▼
-   auth-svc    user-svc   restaurant   search-svc    order-svc
-    :9000       :8081       :8082       :8087          :8083
-       │            │           │                          │
-       │            │           │                          │ Feign
-       │            │           │                          ▼
-       │            │           │                    payment-svc
-       │            │           │                       :8084
-       │            │           │
-       └────────────┴───────────┴──────── Kafka ─────────┘
-                          (samato.* topics)
+       ┌────────────┬───────────┼───────────┬─────────────┬──────────────┐
+       ▼            ▼           ▼           ▼             ▼              ▼
+   auth-svc    user-svc   restaurant   search-svc    order-svc    payment-svc
+    :9000       :8081      :8082         :8087         :8083         :8084
+                                                                  ▲
+                                                              Feign
+                                                                  │
+                                                          order-svc
+                                  ┌──────────────────┴────────┬─────┴──────┬─────────────┐
+                                  │                           │            │             │
+                                  └────────────┴──────────────┴────────────┴──── Kafka ───┘
+                                                       (samato.* topics)
 ```
 
 **Sync** (REST via Feign):
@@ -145,6 +149,22 @@ The databases for these are already provisioned (`delivery_service`, `notificati
 | Caching | Redis, cache-aside pattern (search-service) |
 | Schema evolution | Avro + Confluent Schema Registry (Kafka wire) |
 | Container | Multi-stage Dockerfile, distroless base, non-root user |
+
+---
+
+## Bring-up summary (2026-07-08)
+
+Bugs found and fixed while bringing the 18-container stack online (one per bullet):
+
+- Hibernate 6 `@Lob` on `String`/`byte[]` maps to OID, but migrations declare `TEXT`/`BYTEA` — replaced `@Lob` with explicit `columnDefinition`.
+- Spring Boot 3.3 enforces `spring.config.import` — set `spring.cloud.config.enabled=false` in 5 service yml files.
+- `api-gateway` yml had a duplicate `cloud:` block — merged into one.
+- `user-service` yml had two `spring:` blocks — merged into one.
+- Missing `KafkaTemplate<String, byte[]>` bean in order/payment-service — added `KafkaByteArrayConfig`.
+- Bitnami `schema-registry` env-var remap unreliable on 7.6 — mount the config file directly.
+- `api-gateway` Redis health DOWN — added `SPRING_DATA_REDIS_HOST=redis` to compose env.
+- `kafka-ui` port 8081 conflicted with user-service — moved to 8091.
+- `DevDataSeeder` crashed on re-run (duplicate key) — added `existsByEmail` check.
 
 ---
 

@@ -8,6 +8,14 @@ A complete reference microservice system designed to be your **interview prepara
 
 ---
 
+## Status (2026-07-08)
+
+✅ **Verified end-to-end on this machine:** `mvn package` builds all 12 modules; `docker compose up -d` brings up **all 18 containers** (9 services + 9 infra) running; every service endpoint returns **HTTP 200** on `/actuator/health`; **7 services are registered in Eureka**. The 60-second bring-up sequence in `RUN-THE-BIBLE.md` is the recipe that works.
+
+The live saga (place a real order through the gateway → saga → Razorpay) is **not yet run** — only the standalone smoke test of the code paths has passed. See [`PROJECT-STATUS.md`](PROJECT-STATUS.md) for the honest table of verified vs. unverified.
+
+---
+
 ## TL;DR
 
 ```
@@ -39,18 +47,23 @@ For the long version (prerequisites, troubleshooting, what to do when things bre
 # 1. Prerequisites: Java 21, Maven 3.9+, Docker Desktop
 java -version && mvn -version && docker --version
 
-# 2. Compile (expect a few small errors on first run; see RUN-THE-BIBLE.md §1)
-mvn -B -DskipTests compile
+# 2. Build the jars (Maven 3.9+ required for Spring Boot 3.3.4)
+mvn -B -DskipTests package
 
-# 3. Bring up the full stack
-cd infra && docker compose up -d
+# 3. Build the docker images from the local jars
+cd infra && docker compose build
+
+# 4. Bring up the full stack
+docker compose up -d
 # wait 60-90s for Spring contexts to start
 ```
 
 Verify:
-- Eureka dashboard: <http://localhost:8761>
-- API Gateway:    <http://localhost:8080>
-- Kafka UI:       <http://localhost:8081>
+- Eureka dashboard: <http://localhost:8761> (7 services registered)
+- API Gateway:    <http://localhost:8080/actuator/health>
+- Auth (JWKS):    <http://localhost:9000/.well-known/jwks.json>
+- Schema Registry: <http://localhost:8085/subjects>
+- Kafka UI:       <http://localhost:8091>  (port 8091 — 8081 is user-service)
 - Prometheus:     <http://localhost:9090>
 - Grafana:        <http://localhost:3000> (admin / admin)
 - Zipkin:         <http://localhost:9411>
@@ -174,11 +187,13 @@ See [`docs/INTERVIEW-CHEATSHEET.md`](docs/INTERVIEW-CHEATSHEET.md) for Q&A by to
 
 ## What this project is (and isn't)
 
-**It is:** a structural reference. Every service follows Spring Boot conventions, has a designer-notes doc, and exercises a real microservice pattern. Good for interviews, good for onboarding, good as a starting point.
+**It is:** a structural reference that is **verified up and running end-to-end** on this machine. `mvn package` builds all 12 modules. `docker compose up -d` brings up 18 containers; every service endpoint returns HTTP 200; 7 services are registered in Eureka. The first commit that includes the bring-up is on `main`.
 
-**It isn't (yet):** a running, end-to-end tested system. The code is consistent with itself, but **`mvn install` has never completed** on this machine (Maven 3.3.9 is too old for Spring Boot 3.3.4's plugin requirements — see `RUN-THE-BIBLE.md` §0.2). There are no integration tests. The Docker stack has never been brought up end-to-end. The first `mvn compile` will likely surface 5-30 small errors (mostly missing imports or SDK method names).
+Every service follows Spring Boot conventions, has a designer-notes doc, and exercises a real microservice pattern. Good for interviews, good for onboarding, good as a starting point.
 
-**Honest plan to get there:** `RUN-THE-BIBLE.md` is the step-by-step. After upgrading Maven and running the first compile, fix the topmost error, recompile, repeat. That loop converges in one focused session.
+**It isn't (yet):** a CI-tested system. There are no integration tests, and the live end-to-end saga (a real `POST /api/orders` through the gateway that triggers the saga and a Razorpay call) has not been executed — only the standalone code-path smoke test. The Razorpay SDK calls will use placeholder keys unless you provide real test keys via env. Phases 6+ (delivery, notification, analytics, hardening) are still pending.
+
+**Honest plan to get to a CI-tested system:** the next step is `RUN-THE-BIBLE.md` §10 (Testcontainers) — add an integration-test module that brings up the same stack in CI and exercises the saga. That's the path to "the build is green, the saga ran, the money moved."
 
 ---
 

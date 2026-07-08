@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-ORDER-SERVICE`.
+
+- **Port:** 8083
+- **Image:** samato-order-service:dev (compose tags it `order-service:latest`)
+- **Health:** `curl http://localhost:8083/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: removed `@Lob` from `IdempotencyRecord`, `OutboxEvent`, `SagaStep` (replaced with `columnDefinition` for TEXT/BYTEA); fixed `OrderCancelledEvent` schema (no `restaurantId`); fixed `OrderPlacedEvent` to use `doubleValue()` for `totalAmount` (Avro `double`); added `KafkaByteArrayConfig` so the outbox can publish raw bytes.
+
+---
+
 # Order Service — Interview Notes
 
 > *"Place an order, charge the customer, and tell everyone about it — without ever getting stuck mid-transaction."*

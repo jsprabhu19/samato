@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-PAYMENT-SERVICE`.
+
+- **Port:** 8084
+- **Image:** samato-payment-service:dev (compose tags it `payment-service:latest`)
+- **Health:** `curl http://localhost:8084/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: added `KafkaByteArrayConfig` so the outbox can publish raw bytes.
+
+---
+
 # Phase 5 — Payment Service (Razorpay + Event-Sourced Reconciliation Ledger)
 
 > *"Razorpay moves the money. We remember what happened."*

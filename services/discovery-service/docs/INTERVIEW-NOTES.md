@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-DISCOVERY-SERVICE`.
+
+- **Port:** 8761
+- **Image:** samato-discovery-service:dev (compose tags it `discovery-service:latest`)
+- **Health:** `curl http://localhost:8761/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: none in code; image is built from local jar.
+
+---
+
 # Discovery Service — Interview Notes
 
 ## What it does (1 line)

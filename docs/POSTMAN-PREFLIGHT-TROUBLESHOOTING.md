@@ -4,22 +4,28 @@
 
 This document is for **complete beginners**. It assumes you can run a `curl` command, open a browser, and read an error message. It does **not** assume you know Spring Boot internals. Where a jargon term is unavoidable, it's defined in parentheses the first time it appears.
 
+## Status (2026-07-08)
+
+Verified: 18/18 containers running, all 9 service /actuator/health return HTTP 200, 7 services registered in Eureka. The preflight script in §1.2 should now pass cleanly.
+
 ---
 
 ## Part 1: Pre-flight — Is the stack actually up?
 
 ### What "stack is up" means
 
-The Samato bible is **16 things that need to be running** for a single `POST /api/orders` to succeed end-to-end:
+The Samato bible is **18 things that need to be running** for a single `POST /api/orders` to succeed end-to-end:
 
-- **7 backing-service containers** (started by `docker compose`):
+- **9 backing-service containers** (started by `docker compose`):
   - `samato-postgres` — the database
   - `samato-kafka` — the message bus
   - `samato-redis` — cache and distributed locks
   - `samato-opensearch` — search index
-  - `samato-schema-registry` — Avro schema storage for Kafka payloads
-  - `samato-discovery-service` — service registry (Eureka). *Note: in the compose file this is currently absent as a container; it's the `services/discovery-service` Spring Boot app you'd run separately. `[VERIFY]` — the project-status doc says "Eureka is a Spring Boot app in this monorepo, services/discovery-service", not a docker container.*
-  - `samato-config-service` — *(also runs as a Spring Boot app, not in the compose file shown)* `[VERIFY]`
+  - `samato-schema-registry` — Avro schema storage for Kafka payloads (port 8085)
+  - `samato-discovery-service` — service registry (Eureka). Runs as its own Docker container; see `services/discovery-service/Dockerfile`.
+  - `samato-config-service` — centralized config server. Runs as its own Docker container; see `services/config-service/Dockerfile`.
+  - `samato-kafka-ui` — Kafka topic browser UI (port 8091)
+  - `samato-zipkin`, `samato-prometheus`, `samato-grafana` — observability (optional but typical)
 
 - **9 Spring Boot apps** (the microservices):
   api-gateway, auth-service, user-service, restaurant-service, search-service, order-service, payment-service, config-service, discovery-service.
@@ -52,7 +58,7 @@ $services = @(
   @{name="restaurant-service"; port=8082},
   @{name="order-service";      port=8083},
   @{name="payment-service";    port=8084},
-  @{name="search-service";     port=8087}   # [VERIFY] user-supplied map says 8085; yml says 8087
+  @{name="search-service";     port=8087}   # verified: yml says 8087
 )
 
 $up = 0
@@ -102,7 +108,7 @@ check user-service       8081
 check restaurant-service 8082
 check order-service      8083
 check payment-service    8084
-check search-service     8087   # [VERIFY] see note above
+check search-service     8087   # verified: yml says 8087
 ```
 
 **What this script does, in 3 lines:**
@@ -111,7 +117,7 @@ check search-service     8087   # [VERIFY] see note above
 2. For each Spring Boot service, sends a `GET /actuator/health` and checks if the response says `UP`.
 3. Prints a final summary: `X of 9 services are UP`.
 
-> **Port note:** the user-supplied "standard Samato port map" in the task brief lists `search-service: 8085` and `restaurant-service: 8081` / `user-service: 8082`. The actual `application.yml` files say `search-service: 8087`, `user-service: 8081`, `restaurant-service: 8082`. **The script above uses the values from the yml files** (the ground truth). If you have a different local override, edit the two port numbers in the script. The discrepancy is flagged `[VERIFY]` — pick the values that match *your* `application.yml`.
+> **Port note:** the user-supplied "standard Samato port map" in the task brief lists `search-service: 8085` and `restaurant-service: 8081` / `user-service: 8082`. The actual `application.yml` files say `search-service: 8087`, `user-service: 8081`, `restaurant-service: 8082`. **The script above uses the values from the yml files** (the ground truth). If you have a different local override, edit the two port numbers in the script.
 
 ### What each service health status means
 
@@ -125,7 +131,7 @@ check search-service     8087   # [VERIFY] see note above
 | `restaurant-service` | 8082 | `http://localhost:8082/actuator/health` | Spring alive; Postgres reachable | Same as user-service | `docker logs samato-restaurant-service --tail 50` |
 | `order-service` | 8083 | `http://localhost:8083/actuator/health` | Spring alive; Postgres reachable; Kafka reachable | Kafka topic auto-create disabled; Eureka timeout | `docker logs samato-order-service --tail 50` |
 | `payment-service` | 8084 | `http://localhost:8084/actuator/health` | Spring alive; Postgres reachable; Flyway ran | Same as order-service | `docker logs samato-payment-service --tail 50` |
-| `search-service` | 8087 | `http://localhost:8087/actuator/health` `[VERIFY]` | Spring alive; OpenSearch reachable | OpenSearch not yet ready; missing index | `docker logs samato-search-service --tail 50` |
+| `search-service` | 8087 | `http://localhost:8087/actuator/health` | Spring alive; OpenSearch reachable | OpenSearch not yet ready; missing index | `docker logs samato-search-service --tail 50` |
 
 > **`/actuator/health` is intentionally public.** The gateway routes `GET /actuator/**` straight through, so you can probe any service's health through the gateway *or* its direct port. If you can reach the gateway (`:8080/actuator/health` returns `UP`) but a downstream service is unreachable, the gateway will report `UP` with a `components` map showing which downstream is `DOWN`. Beginners can read this map to see exactly which dependency is broken.
 
@@ -504,7 +510,7 @@ If a container is restarting, see Part 3 for the docker-logs cheat sheet.
 | `samato-auth-service` | `docker logs -f samato-auth-service --tail 100` | `Token issued` (login worked); `Could not load JWK` (the JWKS endpoint isn't up yet); `Flyway migration failed` (DB schema problem) |
 | `samato-user-service` | `docker logs -f samato-user-service --tail 100` | `Started UserServiceApplication` (it's up); `Connection refused` (Postgres); `JWT decode failed` (JWKS URI is wrong) |
 | `samato-restaurant-service` | `docker logs -f samato-restaurant-service --tail 100` | `Started RestaurantServiceApplication`; `Schema registry unreachable`; `OpenSearch rejected` (search index errors) |
-| `samato-search-service` | `docker logs -f samato-search-service --tail 100` | `OpenSearch rejected document` (index mapping mismatch); `Projection skipped event` (event deserialization failed — usually a schema-version mismatch); `started on port(s): 8087` `[VERIFY]` |
+| `samato-search-service` | `docker logs -f samato-search-service --tail 100` | `OpenSearch rejected document` (index mapping mismatch); `Projection skipped event` (event deserialization failed — usually a schema-version mismatch); `started on port(s): 8087` |
 | `samato-order-service` | `docker logs -f samato-order-service --tail 100` | `Saga step X started` (saga is ticking); `Saga step X failed with Y` (the failure reason — usually a `FeignException` from restaurant-service or payment-service); `CHARGE_PAYMENT` |
 | `samato-payment-service` | `docker logs -f samato-payment-service --tail 100` | `Razorpay API returned 401` (placeholder keys — see symptom 9); `Could not write to events table` (event-store write failed — check Postgres); `Projector failed` (see symptom 10) |
 | `samato-discovery-service` | `docker logs -f samato-discovery-service --tail 100` | `Started DiscoveryService`; `Eureka server started`; `Renewal from ...` (heartbeat received) |
@@ -551,13 +557,12 @@ timeout /t 30
 
 # Layer 2: platform (Eureka, config, gateway)
 docker compose up -d discovery-service config-service api-gateway
-# [VERIFY] discovery-service and config-service aren't in the docker-compose.yml reviewed.
-#          If you're running them as Spring Boot apps locally (mvn spring-boot:run), do that here instead.
+# discovery-service and config-service have their own Dockerfiles (services/discovery-service/Dockerfile
+# and services/config-service/Dockerfile) and run as Docker containers in the compose file.
 
 # Layer 3: business services
 docker compose up -d auth-service user-service restaurant-service search-service order-service payment-service
-# [VERIFY] only order-service and payment-service are defined as docker services in the
-#          compose file reviewed; the rest may be run as Spring Boot apps via mvn.
+# All 6 are defined as Docker services in the compose file.
 
 # Wait 60 seconds, then run the health check from Part 1.
 timeout /t 60

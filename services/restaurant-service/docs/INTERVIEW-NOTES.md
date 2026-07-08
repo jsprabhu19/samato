@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-RESTAURANT-SERVICE`.
+
+- **Port:** 8082
+- **Image:** samato-restaurant-service:dev (compose tags it `restaurant-service:latest`)
+- **Health:** `curl http://localhost:8082/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: added `spring.cloud.config.enabled: false`, removed `@Lob` from `OutboxEvent` (replaced with `columnDefinition = "BYTEA"`), fixed `AvroBytes` to use `SeekableByteArrayInput` (not `ByteArrayInputStream`).
+
+---
+
 # Restaurant Service — Interview Notes
 
 ## What it does (1 line)

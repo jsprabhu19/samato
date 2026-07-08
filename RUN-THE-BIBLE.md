@@ -4,7 +4,7 @@
 
 This document is the **operator's manual**. The INTERVIEW-NOTES files in each service are the *designer notes*; this is the *getting-it-running* doc.
 
-**Status (2026-07-07):** the full reactor now compiles and packages — `mvn -B -DskipTests package` returns **BUILD SUCCESS** for all 12 modules (9 services + parent + 2 shared libs). The build is verified; the runtime walkthrough below is not yet run end-to-end on this machine (see section 9).
+**Status (2026-07-08):** the full reactor compiles and packages AND the docker stack runs end-to-end. `mvn -B -DskipTests package` returns **BUILD SUCCESS** for all 12 modules; `docker compose up -d` brings up **18/18 containers** with HTTP 200 on every service /actuator/health and 7 services registered in Eureka. The bring-up sequence in sections 1-3 is verified. The live saga walkthrough in section 5 is the next thing to run.
 
 The bible has 9 Spring Boot services backed by PostgreSQL, Kafka, Redis, OpenSearch, Eureka, Config Server, and an API Gateway. This guide takes you from a fresh checkout to "I just placed an order and the saga completed" in roughly 15–30 minutes, depending on Docker image pulls.
 
@@ -74,7 +74,7 @@ For everything below section 5, the placeholders in `application.yml` work — R
 
 ## 1. First compile (the most important step)
 
-Before touching Docker, prove the code at least compiles. **The full reactor now builds cleanly** — see the verified command in section 1.1. If you've never run the build before, expect the Maven plugin to download ~500 MB of dependencies on the first call (Avro, Confluent, OpenSearch, etc.) and then succeed in 10–20 s on subsequent calls.
+Before touching Docker, prove the code at least compiles. **The full reactor builds cleanly** — see the verified command in section 1.1. The first call will download ~500 MB of dependencies (Avro, Confluent, OpenSearch, etc.) and then succeed in 10-20 s on subsequent calls.
 
 ### 1.1 Build the whole reactor (verified)
 
@@ -222,6 +222,10 @@ If they don't auto-create (depends on broker config), pre-create them via `kafka
 ### 2.6 The `Order.PAID` transition is optional
 
 The saga currently goes `RESERVED → CONFIRMED` directly. That's fine for the bible. Wiring `PAID` via a Kafka listener on `samato.payment.charged` is documented as Phase 6 work in `services/order-service/docs/INTERVIEW-NOTES.md`.
+
+### 2.7 About the Dockerfiles
+
+Every service has a single-stage `Dockerfile` under `services/<svc>/` based on `eclipse-temurin:21-jre-alpine`. It does a plain `COPY target/*.jar app.jar` — there is **no in-container Maven build**. That means you must run `mvn -B -DskipTests package` (section 1.1) **before** `docker compose build`; the build context expects `services/<svc>/target/<svc>-<version>.jar` to already exist. If a jar is missing, `docker compose build` will fail with `target/*.jar: not found`.
 
 ---
 
@@ -674,7 +678,8 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 |---|---|
 | Java + Maven + Docker installed | User must verify |
 | `mvn -B -DskipTests package` succeeds for all 12 modules | **Verified** — see the BUILD SUCCESS transcript in section 1.1 |
-| `docker compose up -d` brings up the stack | **Unverified** — depends on images and Docker memory |
+| `docker compose build` builds all 9 service images | **Verified** — all 9 images build from locally-produced jars |
+| `docker compose up -d` brings up the stack | **Verified** — 18/18 containers running, 7 services in Eureka, all /actuator/health return HTTP 200 |
 | Saga runs end-to-end | **Unverified** — code matches the order-service pattern but never executed on this machine |
 | Razorpay test mode | **Unverified** — keys are placeholders; real flow needs real keys |
 | Kafka topics auto-create | Depends on broker config |
@@ -687,7 +692,7 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 | `samato.postman_environment.json` (Postman env) | **Documented** — 23 variables, importable, OAuth2 client creds pre-set |
 | `postman/samato.postman_collection.json` (Postman collection) | **Documented, runtime not yet exercised** — 7 folders, 25 requests, JSON-validated, all URLs use env variables, every request has a Tests script that captures the right env var |
 
-**Treat this guide as a starting point, not a guarantee.** The build now succeeds (section 1.1 is verified). What's unverified is the runtime: bringing Docker up, exercising the saga, and watching the Razorpay webhook flip the payment state. The Postman walkthrough is also a written document, not a runtime-exercised guide — the JSON examples are sourced from the controller code and should be field-name-accurate, but the exact UUIDs, order IDs, and timing windows will only be confirmed when the stack is actually running end-to-end.
+**Treat this guide as a starting point, not a guarantee.** The build and the docker bring-up are now verified (sections 1.1 and 3 are confirmed end-to-end on this machine; see the 9 bugs fixed in section 11). What's still unverified is the live saga: a real `POST /api/orders` round-trip. The Postman walkthrough is the most likely path to surface the first real bug there.
 
 **When the runtime path is finally verified, update this table** — every "[VERIFY]" tag in the endpoint map should be replaced with "verified", and the runtime column should flip from "Unverified" to "Verified". The Postman walkthrough is the most likely path to surface the first real bug.
 
@@ -706,6 +711,143 @@ That's the path. The Razorpay end-to-end money flow is a separate session of wor
 - **`samato.postman_environment.json`** — importable Postman environment (23 variables)
 - **`postman/samato.postman_collection.json`** — importable Postman **collection** (7 folders, 25 requests) that auto-runs the happy path. Tests scripts capture JWTs and IDs between requests. Click "Run Collection" in Postman to exercise the saga end-to-end.
 - **`postman/samato.postman_collection.json`** — importable Postman **collection** (7 folders, 25 requests) — auto-runs the entire happy path: register, login, create restaurant, add menu, place order, poll saga, inspect payment. Import this alongside the env file and click "Run Collection" to exercise the saga end-to-end. The collection's Tests scripts auto-capture JWTs and IDs from one request into the next.
+
+---
+
+## 11. Bring-up: bugs found and fixed
+
+This section logs every real bug hit while bringing the stack up on this machine (2026-07-08). Each entry is the symptom, the root cause, and the one-line fix. Filed in the order they were encountered.
+
+### 1. Hibernate 6 `@Lob` on String / byte[]
+
+**Error:**
+```
+Schema-validation: wrong column type encountered in column [response_body] in table [idempotency_records];
+  found [text (Types#VARCHAR)], but expecting [oid (Types#CLOB)]
+
+Schema-validation: wrong column type encountered in column [payload] in table [outbox_events];
+  found [bytea (Types#VARBINARY)], but expecting [oid (Types#BLOB)]
+```
+
+**Root cause:** Hibernate 6 maps `@Lob String` to PostgreSQL OID and `@Lob byte[]` to OID, but the Flyway migrations use `TEXT` and `BYTEA`. Hibernate refuses to start because the runtime mapping and the schema disagree.
+
+**Fix:** Dropped `@Lob` and set an explicit `columnDefinition` on the offending fields. Touched 4 entities: `IdempotencyRecord`, `SagaStep`, and both `OutboxEvent` classes (order-service + payment-service). For strings: `@Column(columnDefinition = "TEXT")`. For `byte[]`: `@Column(columnDefinition = "BYTEA")`.
+
+### 2. Spring Boot 3.3 strict config import
+
+**Error:**
+```
+The following 1 profile is invalid: "default"
+Description:
+Invalid value type for attribute 'spring.config.import': java.lang.String[]
+Reason: No spring.config.import property has been defined
+Action:
+Add a 'spring.config.import' property (with prefix 'spring.config') to your configuration
+```
+
+**Root cause:** Spring Boot 3.3 removed the implicit "no config server unless told otherwise" behavior. Any service that pulls in `spring-cloud-config-client` now must either set `spring.config.import` or explicitly disable the config client.
+
+**Fix:** Added `spring.cloud.config.enabled: false` to the 5 service yml files that don't actually talk to the config server: `user-service`, `auth-service`, `api-gateway`, `restaurant-service`, `search-service`.
+
+### 3. api-gateway `DuplicateKeyException` on `cloud:`
+
+**Error:**
+```
+Caused by: org.yaml.snakeyaml.error.YAMLException:
+  while constructing a mapping, found duplicate key 'cloud'
+ in 'reader', line 18, column 1:
+    cloud:
+    ^
+```
+
+**Root cause:** The `api-gateway` yml had two `cloud:` blocks — one nested under `spring:` for the config-client disable, and one at the top level for `gateway:` routes. SnakeYAML refuses the second key.
+
+**Fix:** Merged both `cloud:` blocks into a single nested `spring.cloud:` section. The `gateway:` and `config:` keys now live under one `cloud:` parent.
+
+### 4. user-service duplicate `spring:` block
+
+**Error:**
+```
+Caused by: org.yaml.snakeyaml.error.YAMLException:
+  while constructing a mapping, found duplicate key 'spring'
+ in 'reader', line 1, column 1:
+    spring:
+    ^
+```
+
+**Root cause:** `user-service` had a `spring.cloud.openfeign` block at the top level instead of nested under `spring:`. SnakeYAML saw two `spring:` top-level keys.
+
+**Fix:** Merged the stray `spring.cloud.openfeign` block into the existing top-level `spring:` map.
+
+### 5. Missing `KafkaTemplate<String, byte[]>` bean
+
+**Error:**
+```
+***************************
+APPLICATION FAILED TO START
+***************************
+Parameter 1 of constructor in com.samato.order.service.OutboxPublisher
+  required a bean of type 'org.springframework.kafka.core.KafkaTemplate<java.lang.String, byte[]>'
+  that could not be found.
+```
+
+**Root cause:** The `shared-kafka` library only publishes a `KafkaTemplate<String, SpecificRecord>` for Avro. The outbox publisher in order-service and payment-service needs to send raw `byte[]` (the serialised envelope), which is a different generic and isn't autoconfigured.
+
+**Fix:** Added a `KafkaByteArrayConfig` to both `order-service` and `payment-service`. It declares a `ProducerFactory<String, byte[]>` and a `KafkaTemplate<String, byte[]>` bean built on the same `bootstrap-servers` property. The outbox publisher now wires the byte[] template, not the Avro one.
+
+### 6. Bitnami schema-registry env-var remap
+
+**Error:**
+```
+[2026-07-08T...] ERROR Error starting application
+io.confluent.kafka.schemaregistry.exceptions.RestClientException:
+  Failed to get Kafka cluster ID
+...
+org.apache.kafka.common.config.ConfigException:
+  Invalid value [PLAINTEXT://localhost:9092] for configuration
+  kafkastore.bootstrap.servers: No resolvable bootstrap urls
+```
+
+**Root cause:** On `bitnamilegacy/schema-registry:7.6`, the `SCHEMA_REGISTRY_KAFKA_*` and `SCHEMA_REGISTRY_KAFKASTORE_*` env vars are silently ignored — the image only reads the bare `KAFKA_*` vars and then builds a config file from them. The override we set never reached the registry.
+
+**Fix:** Mounted a hand-written `infra/schema-registry/schema-registry.properties` file directly via a volume (`/opt/bitnami/schema-registry/conf/schema-registry.properties:/.../schema-registry.properties:ro`) and removed the misleading env vars. The properties file sets `kafkastore.bootstrap.servers=PLAINTEXT://kafka:9092` and the listeners explicitly.
+
+### 7. api-gateway Redis health DOWN
+
+**Error:**
+```
+{"status":"DOWN","components":{"redis":{"status":"DOWN",
+  "details":{"error":"org.springframework.data.redis.RedisConnectionFailureException:
+    Unable to connect to Redis at localhost:6379"}}}}
+```
+
+**Root cause:** `api-gateway` has `spring-boot-starter-data-redis-reactive` on the classpath, which auto-registers a Redis health indicator. With no `spring.data.redis.host` set, the indicator defaulted to `localhost:6379` — and the api-gateway container is not the redis container.
+
+**Fix:** Added `SPRING_DATA_REDIS_HOST=redis` and `SPRING_DATA_REDIS_PORT=6379` to the api-gateway service in `infra/docker-compose.yml`. Health went UP within the next healthcheck tick.
+
+### 8. kafka-ui port conflict
+
+**Error:**
+```
+docker compose up -d
+  failed to bind host port 0.0.0.0:8081: port is already allocated
+```
+
+**Root cause:** `user-service` publishes on host port `8081`, and `kafka-ui` was also configured to publish on `8081`.
+
+**Fix:** Changed the kafka-ui host port to `8091` (container port stays `8080`). Now `http://localhost:8091` opens the UI.
+
+### 9. DevDataSeeder duplicate key
+
+**Error:**
+```
+ERROR: duplicate key value violates unique constraint "users_email_key"
+  Detail: Key (email)=(alice@example.com) already exists.
+```
+
+**Root cause:** The smoke test in section 4 registers `alice@example.com` and gets back a server-generated UUID. On container restart, `DevDataSeeder` runs and tries to insert `alice@example.com` with a **hardcoded** UUID. The `users` table already has the row with the smoke-test UUID; the seeder's `existsById(hardcodedUuid)` returns `false`, so it inserts — and the unique constraint on `email` blows up.
+
+**Fix:** In `DevDataSeeder`, added an `existsByEmail(email)` check alongside the existing `existsById(uuid)` check. If either returns `true`, the seeder skips the row. Both keys are now treated as identity signals.
 
 ---
 

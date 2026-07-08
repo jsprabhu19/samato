@@ -1,3 +1,14 @@
+## Status (2026-07-08)
+
+✅ **Verified running on this machine.** The service image is built by `docker compose build` from the local jar, the container is `Up (healthy)`, `/actuator/health` returns **HTTP 200** with `{"status":"UP"}`, and the service is registered in **Eureka** as `SAMATO-CONFIG-SERVICE`.
+
+- **Port:** 8888
+- **Image:** samato-config-service:dev (compose tags it `config-service:latest`)
+- **Health:** `curl http://localhost:8888/actuator/health` → `{"status":"UP", ...}`
+- **Bring-up bug fixes in this service**: none in code (yml was already fine); image is built from local jar.
+
+---
+
 # Config Service — Interview Notes
 
 ## What it does (1 line)
