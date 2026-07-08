@@ -37,7 +37,8 @@ services:
 
   # ─── Apache Kafka (KRaft mode, no Zookeeper) ────────────────────
   kafka:
-    image: bitnami/kafka:3.7
+    # NOTE: bitnami/* images were deprecated; use bitnamilegacy/* for older tags.
+    image: bitnamilegacy/kafka:3.7
     container_name: samato-kafka
     ports:
       - "9092:9092"   # external
@@ -64,12 +65,15 @@ services:
 
   # ─── Schema Registry (for Avro / Protobuf payloads) ─────────────
   schema-registry:
-    image: bitnami/schema-registry:7.6
+    image: bitnamilegacy/schema-registry:7.6
     container_name: samato-schema-registry
     ports: ["8085:8081"]
-    environment:
-      SCHEMA_REGISTRY_KAFKA_BOOTSTRAP_SERVERS: "kafka:9094"
-      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+    volumes:
+      # Bitnami's env-var remap for kafkastore is unreliable on 7.6, so we
+      # mount the config file directly. The container entrypoint reads
+      # /opt/bitnami/schema-registry/etc/schema-registry/schema-registry.properties
+      # if present.
+      - ./schema-registry-config/schema-registry.properties:/opt/bitnami/schema-registry/etc/schema-registry/schema-registry.properties:ro
     depends_on:
       kafka: { condition: service_healthy }
 
@@ -93,11 +97,10 @@ services:
     container_name: samato-zipkin
     ports: ["9411:9411"]
     environment:
-      # Store traces in Postgres so they survive restarts
-      STORAGE_TYPE: jdbc
-      JDBC_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fd_shared
-      JDBC_DATASOURCE_USERNAME: fd
-      JDBC_DATASOURCE_PASSWORD: fd
+      # In-memory storage for local dev. For prod, set STORAGE_TYPE: jdbc
+      # and add the zipkin-jdbc-* driver to the classpath.
+      STORAGE_TYPE: mem
+      STORAGE_MEM_MAX_SPANS: 100000
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -160,7 +163,9 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: samato-kafka-ui
-    ports: ["8081:8080"]
+    # Port 8081 is taken by user-service. Use 8091 to keep the
+    # user-service port free for the user-facing API.
+    ports: ["8091:8080"]
     environment:
       KAFKA_CLUSTERS_0_NAME: samato
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9094
@@ -168,6 +173,79 @@ services:
     depends_on:
       kafka: { condition: service_healthy }
       schema-registry: { condition: service_started }
+
+  # ─── Discovery service (Eureka, port 8761) ──────────────────────
+  discovery-service:
+    build:
+      context: ..
+      dockerfile: services/discovery-service/Dockerfile
+    container_name: samato-discovery-service
+    ports: ["8761:8761"]
+
+  # ─── Config service (Spring Cloud Config, port 8888) ─────────────
+  config-service:
+    build:
+      context: ..
+      dockerfile: services/config-service/Dockerfile
+    container_name: samato-config-service
+    ports: ["8888:8888"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/config
+      SPRING_DATASOURCE_USERNAME: fd
+      SPRING_DATASOURCE_PASSWORD: fd
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # ─── Auth service (Spring Auth Server, port 9000) ───────────────
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: samato-auth-service
+    ports: ["9000:9000"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth
+      SPRING_DATASOURCE_USERNAME: fd
+      SPRING_DATASOURCE_PASSWORD: fd
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+    depends_on:
+      postgres: { condition: service_healthy }
+      discovery-service: { condition: service_started }
+
+  # ─── API Gateway (Spring Cloud Gateway, port 8080) ──────────────
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: samato-api-gateway
+    ports: ["8080:8080"]
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+      # Redis is used for rate-limiting and other gateway state. Without
+      # this, the health endpoint reports DOWN (Redis connection failure)
+      # and Kubernetes would never route traffic to us.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+    depends_on:
+      discovery-service: { condition: service_started }
+      auth-service: { condition: service_started }
+
+  # ─── User service (port 8081) ───────────────────────────────────
+  user-service:
+    build:
+      context: ..
+      dockerfile: services/user-service/Dockerfile
+    container_name: samato-user-service
+    ports: ["8081:8081"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/user_service
+      SPRING_DATASOURCE_USERNAME: fd
+      SPRING_DATASOURCE_PASSWORD: fd
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:9000/.well-known/jwks.json
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+    depends_on:
+      postgres: { condition: service_healthy }
+      discovery-service: { condition: service_started }
 
   # ─── Order service (Phase 4: Saga orchestrator) ──────────────────
   order-service:
@@ -188,7 +266,6 @@ services:
       kafka: { condition: service_healthy }
       redis: { condition: service_started }
       opensearch: { condition: service_started }
-    networks: [samato-net]
 
   # ─── Payment service (Phase 5: Razorpay + event-sourced ledger) ─
   payment-service:
@@ -206,14 +283,60 @@ services:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
       # Razorpay test-mode keys. In real life these come from a secrets
       # manager (AWS Secrets Manager, Vault). The placeholders below
-      # are the SDK's default; replace via env or config-server.
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:rzp_test_xxxxxxxxxxxxxx}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:placeholder_secret_xxxxxxxxxxxxxx}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:placeholder_webhook_secret_xxxxxxxx}
+      # are the SDK's default; override in your shell before `docker compose up`:
+      #   $env:RAZORPAY_KEY_ID = 'rzp_test_xxx'; $env:RAZORPAY_KEY_SECRET = '...'
+      # Compose's ${VAR:-default} form: uses the env var if set, else the default.
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_xxxxxxxxxxxxxx}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-placeholder_secret_xxxxxxxxxxxxxx}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-placeholder_webhook_secret_xxxxxxxx}
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
-    networks: [samato-net]
+
+  # ─── Restaurant service (port 8082) ─────────────────────────────
+  restaurant-service:
+    build:
+      context: ..
+      dockerfile: services/restaurant-service/Dockerfile
+    container_name: samato-restaurant-service
+    ports: ["8082:8082"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/restaurant_service
+      SPRING_DATASOURCE_USERNAME: fd
+      SPRING_DATASOURCE_PASSWORD: fd
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:9000/.well-known/jwks.json
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      schema-registry: { condition: service_started }
+      redis: { condition: service_started }
+      opensearch: { condition: service_started }
+      discovery-service: { condition: service_started }
+
+  # ─── Search service (port 8087) ─────────────────────────────────
+  search-service:
+    build:
+      context: ..
+      dockerfile: services/search-service/Dockerfile
+    container_name: samato-search-service
+    ports: ["8087:8087"]
+    environment:
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:9000/.well-known/jwks.json
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SAMATO_OPENSEARCH_HOST: opensearch
+      SAMATO_OPENSEARCH_PORT: "9200"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-service:8761/eureka/
+    depends_on:
+      kafka: { condition: service_healthy }
+      schema-registry: { condition: service_started }
+      opensearch: { condition: service_started }
+      discovery-service: { condition: service_started }
 
 volumes:
   samato-pgdata:
@@ -222,7 +345,3 @@ volumes:
   samato-promdata:
   samato-grafanadata:
   samato-osdata:
-
-networks:
-  default:
-    name: samato-net

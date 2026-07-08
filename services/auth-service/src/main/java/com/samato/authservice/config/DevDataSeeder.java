@@ -60,7 +60,9 @@ public class DevDataSeeder implements CommandLineRunner {
 
     private void seedUser(String id, String email, Set<Role> roles) {
         UUID uuid = UUID.fromString(id);
-        if (users.existsById(uuid)) return;
+        // Check both: id (first boot) and email (user with same email was created
+        // by an earlier test run with a different UUID, e.g. the smoke test).
+        if (users.existsById(uuid) || users.existsByEmail(email)) return;
         UserAccount u = new UserAccount();
         u.setId(uuid);
         u.setEmail(email);

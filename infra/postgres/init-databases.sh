@@ -6,7 +6,7 @@ set -e
 create_db() {
   local db=$1
   echo "Creating database: $db"
-  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" <<-EOSQL
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<-EOSQL
     CREATE DATABASE $db;
     GRANT ALL PRIVILEGES ON DATABASE $db TO $POSTGRES_USER;
 EOSQL

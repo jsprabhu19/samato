@@ -5,6 +5,9 @@ server:
 spring:
   application:
     name: samato-user-service
+  cloud:
+    config:
+      enabled: false   # for local dev; flip on when config-service is up
   datasource:
     url: jdbc:postgresql://localhost:5432/user_service
     username: fd

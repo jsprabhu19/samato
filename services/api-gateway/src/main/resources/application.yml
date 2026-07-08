@@ -8,6 +8,8 @@ spring:
   main:
     web-application-type: reactive     # Gateway requires WebFlux
   cloud:
+    config:
+      enabled: false   # for local dev; flip on when config-service is up
     gateway:
       discovery:
         locator:

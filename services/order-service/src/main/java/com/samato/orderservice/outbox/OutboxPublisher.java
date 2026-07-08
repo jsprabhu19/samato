@@ -68,7 +68,7 @@ public class OutboxPublisher {
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
                 .setRestaurantId(order.getRestaurantId().toString())
-                .setTotalAmount(order.getTotalAmount().toPlainString())
+                .setTotalAmount(order.getTotalAmount().doubleValue())
                 .setCurrency(order.getCurrency())
                 .setItemCount(order.getItems().size())
                 .setOccurredAt(System.currentTimeMillis())
@@ -81,7 +81,7 @@ public class OutboxPublisher {
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
                 .setRestaurantId(order.getRestaurantId().toString())
-                .setTotalAmount(order.getTotalAmount().toPlainString())
+                .setTotalAmount(order.getTotalAmount().doubleValue())
                 .setCurrency(order.getCurrency())
                 .setOccurredAt(System.currentTimeMillis())
                 .build();
@@ -89,10 +89,12 @@ public class OutboxPublisher {
     }
 
     public void appendOrderCancelled(Order order) {
+        // OrderCancelledEvent schema (shared-kafka/src/main/avro/OrderCancelledEvent.avsc)
+        // does NOT carry restaurantId — only orderId, customerId, reason.
+        // The Java code must match the schema, since the schema is the wire contract.
         OrderCancelledEvent event = OrderCancelledEvent.newBuilder()
                 .setOrderId(order.getId().toString())
                 .setCustomerId(order.getCustomerId().toString())
-                .setRestaurantId(order.getRestaurantId().toString())
                 .setReason(order.getCancellationReason() != null
                         ? order.getCancellationReason() : "unspecified")
                 .setOccurredAt(System.currentTimeMillis())

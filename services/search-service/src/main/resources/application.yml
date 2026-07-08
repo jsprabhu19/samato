@@ -5,6 +5,9 @@ server:
 spring:
   application:
     name: samato-search-service
+  cloud:
+    config:
+      enabled: false   # for local dev; flip on when config-service is up
   security:
     oauth2:
       resourceserver:

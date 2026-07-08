@@ -54,8 +54,8 @@ public class SagaStep {
      * later steps or compensations need (e.g., paymentId from
      * CHARGE_PAYMENT so REFUND_PAYMENT can call the right endpoint).
      */
-    @Lob
-    @Column(name = "payload")
+    // No @Lob: migration uses TEXT, but Hibernate 6 + Postgres maps @Lob String -> OID.
+    @Column(name = "payload", columnDefinition = "TEXT")
     private String payload;
 
     @Column(name = "error_message", length = 1000)

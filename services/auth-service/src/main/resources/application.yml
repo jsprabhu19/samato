@@ -5,6 +5,9 @@ server:
 spring:
   application:
     name: samato-auth-service
+  cloud:
+    config:
+      enabled: false   # for local dev; flip on when config-service is up
   profiles:
     # Defaults to "default" so the DevDataSeeder runs. Override with
     # SPRING_PROFILES_ACTIVE=prod (or no-seeder) for production.

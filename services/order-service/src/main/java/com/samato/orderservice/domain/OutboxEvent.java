@@ -35,8 +35,8 @@ public class OutboxEvent {
     @Column(nullable = false, length = 200)
     private String eventType;
 
-    @Lob
-    @Column(nullable = false)
+    // No @Lob: migration uses BYTEA, but Hibernate 6 + Postgres maps @Lob byte[] -> OID.
+    @Column(nullable = false, columnDefinition = "BYTEA")
     private byte[] payload;
 
     @Column(name = "sent_at")

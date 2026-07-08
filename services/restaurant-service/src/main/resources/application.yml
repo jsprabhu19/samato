@@ -5,6 +5,9 @@ server:
 spring:
   application:
     name: samato-restaurant-service
+  cloud:
+    config:
+      enabled: false   # for local dev; flip on when config-service is up
   datasource:
     url: jdbc:postgresql://localhost:5432/restaurant_service
     username: fd

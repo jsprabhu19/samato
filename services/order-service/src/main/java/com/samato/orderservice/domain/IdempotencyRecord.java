@@ -54,8 +54,8 @@ public class IdempotencyRecord {
     @Column(name = "response_status", nullable = false)
     private int responseStatus;
 
-    @Lob
-    @Column(name = "response_body")
+    // No @Lob: migration uses TEXT, but Hibernate 6 + Postgres maps @Lob String -> OID.
+    @Column(name = "response_body", columnDefinition = "TEXT")
     private String responseBody;
 
     @Column(name = "order_id", columnDefinition = "uuid")
