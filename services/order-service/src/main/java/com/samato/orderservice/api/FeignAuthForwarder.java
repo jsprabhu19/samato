@@ -1,5 +1,6 @@
 package com.samato.orderservice.api;
 
+import com.samato.shared.observability.FeignCorrelationIdInterceptor;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,5 +56,17 @@ public class FeignAuthForwarder {
                 template.header("Authorization", "Bearer " + token);
             }
         };
+    }
+
+    /**
+     * Propagates the correlationId (and trace/span ids) from MDC onto
+     * every outgoing call. Without this, restaurant-service would
+     * generate its own correlationId and the saga would be uncorrelatable
+     * across services. Lives in the shared module so any service that
+     * depends on shared gets it for free when it adds a Feign client.
+     */
+    @Bean
+    public FeignCorrelationIdInterceptor correlationIdInterceptor() {
+        return new FeignCorrelationIdInterceptor();
     }
 }

@@ -1,5 +1,6 @@
 package com.samato.searchservice.projection;
 
+import com.samato.sharedkafka.observability.MdcContext;
 import org.apache.avro.specific.SpecificRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -26,6 +27,13 @@ import org.springframework.stereotype.Component;
  *   - We use `restaurantId` as the OpenSearch `_id` so re-delivery of the
  *     same event is just a no-op upsert.
  *
+ * MDC propagation:
+ *   The Kafka poll thread is different from the listener thread. We
+ *   install correlationId/traceId/spanId from the record headers into
+ *   MDC for the duration of {@link RestaurantProjector#apply} so log
+ *   lines emitted while projecting include the originating request's
+ *   correlation id.
+ *
  * The actual projection logic lives in {@link RestaurantProjector}.
  * This class is just the Kafka plumbing.
  */
@@ -48,24 +56,26 @@ public class RestaurantEventListener {
             groupId = "samato-search-service"
     )
     public void onEvent(ConsumerRecord<String, SpecificRecord> record, Acknowledgment ack) {
-        SpecificRecord ev = record.value();
-        // Avro-generated records expose getEventId() because every event schema
-        // defines an `eventId` field. We read the value via the schema, not a
-        // marker interface, because the generated code doesn't implement ours.
-        // SpecificRecord has two `get` overloads; cast to Object then String
-        // to disambiguate from the int-positional overload.
-        Object eventIdObj = ((org.apache.avro.generic.GenericRecord) ev).get("eventId");
-        String eventId = eventIdObj == null ? "?" : eventIdObj.toString();
-        log.info("Projecting event id={} type={} key={}", eventId, record.topic(), record.key());
-        try {
-            projector.apply(ev);
-            ack.acknowledge();
-        } catch (Exception ex) {
-            // Don't ack — the consumer will redeliver.
-            // (For poison messages, we'd send to a DLQ topic after N retries.
-            //  Out of scope for the bible.)
-            log.error("Projection failed for event {}: {}", eventId, ex.getMessage());
-            throw ex;
+        try (var ignored = MdcContext.fromKafka(record)) {
+            SpecificRecord ev = record.value();
+            // Avro-generated records expose getEventId() because every event schema
+            // defines an `eventId` field. We read the value via the schema, not a
+            // marker interface, because the generated code doesn't implement ours.
+            // SpecificRecord has two `get` overloads; cast to Object then String
+            // to disambiguate from the int-positional overload.
+            Object eventIdObj = ((org.apache.avro.generic.GenericRecord) ev).get("eventId");
+            String eventId = eventIdObj == null ? "?" : eventIdObj.toString();
+            log.info("Projecting event id={} type={} key={}", eventId, record.topic(), record.key());
+            try {
+                projector.apply(ev);
+                ack.acknowledge();
+            } catch (Exception ex) {
+                // Don't ack — the consumer will redeliver.
+                // (For poison messages, we'd send to a DLQ topic after N retries.
+                //  Out of scope for the bible.)
+                log.error("Projection failed for event {}: {}", eventId, ex.getMessage());
+                throw ex;
+            }
         }
     }
 }

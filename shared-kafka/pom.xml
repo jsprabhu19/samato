@@ -16,6 +16,17 @@
     <description>Kafka producer/consumer config (Avro + Schema Registry) shared across services</description>
 
     <dependencies>
+        <!--
+          shared (cross-cutting kernel: MdcKeys, MdcContext, etc.) must be
+          on the classpath so KafkaProducerConfig can register
+          KafkaMdcProducerInterceptor. Order matters: shared first.
+        -->
+        <dependency>
+            <groupId>com.samato</groupId>
+            <artifactId>shared</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>

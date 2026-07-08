@@ -20,6 +20,8 @@ import java.util.UUID;
 public final class MdcKeys {
     public static final String USER_ID = "userId";
     public static final String CORRELATION_ID = "correlationId";
+    public static final String TRACE_ID = "traceId";
+    public static final String SPAN_ID  = "spanId";
 
     private MdcKeys() {}
 

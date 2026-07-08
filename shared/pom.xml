@@ -29,7 +29,11 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Tracing / observability -->
+        <!--
+          Tracing / observability
+          <groupId>io.micrometer</groupId> and <groupId>io.zipkin.reporter2</groupId>
+          have been moved to the new <dependencies> block below.
+        -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-brave</artifactId>
@@ -37,6 +41,18 @@
         <dependency>
             <groupId>io.zipkin.reporter2</groupId>
             <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+
+        <!--
+          Feign interceptor support. We expose a RequestInterceptor in the
+          observability package; services that use Feign pick it up
+          automatically. Feign is included on every service's classpath
+          even though only 3 services use it directly — the cost is one
+          transitive jar and it makes the shared library self-contained.
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
 
         <!-- Tests -->

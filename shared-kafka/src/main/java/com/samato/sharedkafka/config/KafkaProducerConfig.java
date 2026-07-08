@@ -1,5 +1,6 @@
 package com.samato.sharedkafka.config;
 
+import com.samato.sharedkafka.observability.KafkaMdcProducerInterceptor;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
 import io.confluent.kafka.serializers.KafkaAvroSerializerConfig;
 import org.apache.avro.specific.SpecificRecord;
@@ -69,6 +70,13 @@ public class KafkaProducerConfig {
         // as consumers can read old data with the new schema. Conservative.
         props.put("auto.register.schemas", true);
         props.put("use.latest.version", true);
+
+        // Stamp X-Correlation-Id (and X-Trace-Id/X-Span-Id) on every
+        // outgoing Kafka record. Consumer side reads them via MdcContext.
+        // The interceptor is configured by class name (string) because
+        // that's what Kafka's ProducerConfig expects.
+        props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG,
+                KafkaMdcProducerInterceptor.class.getName());
         return new DefaultKafkaProducerFactory<>(props);
     }
 

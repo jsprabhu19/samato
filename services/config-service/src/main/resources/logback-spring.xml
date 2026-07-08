@@ -3,6 +3,16 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
+    <!--
+      Pattern includes correlationId, traceId, spanId from MDC. When Micrometer
+      Tracing is on the classpath, traceId/spanId are auto-populated. The
+      correlationId is set by CorrelationIdFilter (servlet) or
+      CorrelationIdWebFilter (reactive, gateway) at request entry, and
+      propagated across Feign / Kafka by the Mdc-interceptors in
+      com.samato.shared.observability.
+
+      %X{...:-} prints empty if missing instead of "null" — easier to grep.
+    -->
     <property name="LOG_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{correlationId:-},%X{traceId:-},%X{spanId:-}] [%t] %-40.40logger{39} : %m%n%wEx"/>
 
@@ -17,8 +27,11 @@
         <appender-ref ref="STDOUT"/>
     </root>
 
-    <!-- KEEP the existing service-specific loggers that were already in the file -->
     <logger name="com.samato" level="DEBUG"/>
     <logger name="org.springframework.kafka" level="INFO"/>
     <logger name="org.hibernate.SQL" level="WARN"/>
+    <logger name="org.springframework.cloud" level="INFO"/>
+    <logger name="org.springframework.security" level="INFO"/>
+    <logger name="com.razorpay" level="INFO"/>
+    <logger name="org.apache.kafka" level="WARN"/>
 </configuration>
