@@ -1,0 +1,21 @@
+{
+  "service": "config-service",
+  "modulePath": "services/config-service",
+  "files": [
+    {
+      "path": "services/config-service/src/main/java/com/samato/configservice/ConfigServiceApplication.java",
+      "package": "com.samato.configservice",
+      "className": "ConfigServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableConfigServer"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    }
+  ],
+  "migrations": [],
+  "endpoints": [],
+  "javaFileCount": 1
+}

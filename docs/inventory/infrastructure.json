@@ -1,0 +1,947 @@
+{
+  "compose": {
+    "project_name": "samato",
+    "services": [
+      {
+        "name": "postgres",
+        "image_or_build": "postgres:16-alpine",
+        "container_name": "samato-postgres",
+        "ports": ["5432:5432"],
+        "environment": {
+          "POSTGRES_USER": "fd",
+          "POSTGRES_PASSWORD": "fd",
+          "POSTGRES_DB": "fd_shared"
+        },
+        "volumes": [
+          "samato-pgdata:/var/lib/postgresql/data",
+          "./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro"
+        ],
+        "depends_on": [],
+        "healthcheck": {
+          "test": ["CMD-SHELL", "pg_isready -U fd"],
+          "interval": "5s",
+          "timeout": "3s",
+          "retries": 10
+        }
+      },
+      {
+        "name": "kafka",
+        "image_or_build": "bitnamilegacy/kafka:3.7",
+        "container_name": "samato-kafka",
+        "ports": ["9092:9092", "9094:9094"],
+        "environment": {
+          "KAFKA_CFG_NODE_ID": "1",
+          "KAFKA_CFG_PROCESS_ROLES": "broker,controller",
+          "KAFKA_CFG_CONTROLLER_QUORUM_VOTERS": "1@kafka:9093",
+          "KAFKA_CFG_LISTENERS": "PLAINTEXT://:9092,CONTROLLER://:9093,INTERNAL://:9094",
+          "KAFKA_CFG_ADVERTISED_LISTENERS": "PLAINTEXT://localhost:9092,INTERNAL://kafka:9094",
+          "KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT",
+          "KAFKA_CFG_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+          "KAFKA_CFG_INTER_BROKER_LISTENER_NAME": "INTERNAL",
+          "KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE": "true",
+          "ALLOW_PLAINTEXT_LISTENER": "yes"
+        },
+        "volumes": ["samato-kafkadata:/bitnami/kafka"],
+        "depends_on": [],
+        "healthcheck": {
+          "test": ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"],
+          "interval": "10s",
+          "timeout": "5s",
+          "retries": 10
+        }
+      },
+      {
+        "name": "schema-registry",
+        "image_or_build": "bitnamilegacy/schema-registry:7.6",
+        "container_name": "samato-schema-registry",
+        "ports": ["8085:8081"],
+        "environment": {},
+        "volumes": ["./schema-registry-config/schema-registry.properties:/opt/bitnami/schema-registry/etc/schema-registry/schema-registry.properties:ro"],
+        "depends_on": [
+          {"kafka": "service_healthy"}
+        ]
+      },
+      {
+        "name": "redis",
+        "image_or_build": "redis:7-alpine",
+        "container_name": "samato-redis",
+        "ports": ["6379:6379"],
+        "command": ["redis-server", "--appendonly", "yes"],
+        "environment": {},
+        "volumes": ["samato-redisdata:/data"],
+        "depends_on": [],
+        "healthcheck": {
+          "test": ["CMD", "redis-cli", "ping"],
+          "interval": "5s",
+          "timeout": "3s",
+          "retries": 10
+        }
+      },
+      {
+        "name": "zipkin",
+        "image_or_build": "openzipkin/zipkin:3",
+        "container_name": "samato-zipkin",
+        "ports": ["9411:9411"],
+        "environment": {
+          "STORAGE_TYPE": "mem",
+          "STORAGE_MEM_MAX_SPANS": "100000"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"}
+        ]
+      },
+      {
+        "name": "prometheus",
+        "image_or_build": "prom/prometheus:v2.54.1",
+        "container_name": "samato-prometheus",
+        "ports": ["9090:9090"],
+        "command": ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"],
+        "environment": {},
+        "volumes": [
+          "./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
+          "samato-promdata:/prometheus"
+        ],
+        "depends_on": []
+      },
+      {
+        "name": "grafana",
+        "image_or_build": "grafana/grafana:11.2.0",
+        "container_name": "samato-grafana",
+        "ports": ["3000:3000"],
+        "environment": {
+          "GF_SECURITY_ADMIN_USER": "admin",
+          "GF_SECURITY_ADMIN_PASSWORD": "admin",
+          "GF_USERS_ALLOW_SIGN_UP": "false"
+        },
+        "volumes": [
+          "samato-grafanadata:/var/lib/grafana",
+          "./grafana/provisioning:/etc/grafana/provisioning:ro"
+        ],
+        "depends_on": [
+          {"prometheus": "service_started"}
+        ]
+      },
+      {
+        "name": "keycloak",
+        "image_or_build": "quay.io/keycloak/keycloak:25.0",
+        "container_name": "samato-keycloak",
+        "command": ["start-dev", "--http-port=9080", "--http-relative-path=/auth"],
+        "ports": ["9080:9080"],
+        "environment": {
+          "KEYCLOAK_ADMIN": "admin",
+          "KEYCLOAK_ADMIN_PASSWORD": "admin",
+          "KC_DB": "dev-mem"
+        },
+        "profiles": ["auth"],
+        "volumes": [],
+        "depends_on": []
+      },
+      {
+        "name": "opensearch",
+        "image_or_build": "opensearchproject/opensearch:2.15.0",
+        "container_name": "samato-opensearch",
+        "ports": ["9200:9200"],
+        "environment": {
+          "discovery.type": "single-node",
+          "bootstrap.memory_lock": "true",
+          "OPENSEARCH_JAVA_OPTS": "-Xms512m -Xmx512m",
+          "DISABLE_SECURITY_PLUGIN": "true",
+          "DISABLE_INSTALL_DEMO_CONFIG": "true"
+        },
+        "ulimits": {"memlock": {"soft": -1, "hard": -1}},
+        "volumes": ["samato-osdata:/usr/share/opensearch/data"],
+        "depends_on": []
+      },
+      {
+        "name": "kafka-ui",
+        "image_or_build": "provectuslabs/kafka-ui:v0.7.2",
+        "container_name": "samato-kafka-ui",
+        "ports": ["8091:8080"],
+        "environment": {
+          "KAFKA_CLUSTERS_0_NAME": "samato",
+          "KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS": "kafka:9094",
+          "KAFKA_CLUSTERS_0_SCHEMAREGISTRY": "http://schema-registry:8081"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"kafka": "service_healthy"},
+          {"schema-registry": "service_started"}
+        ]
+      },
+      {
+        "name": "discovery-service",
+        "image_or_build": "build { context: .., dockerfile: services/discovery-service/Dockerfile }",
+        "container_name": "samato-discovery-service",
+        "ports": ["8761:8761"],
+        "environment": {},
+        "volumes": [],
+        "depends_on": []
+      },
+      {
+        "name": "config-service",
+        "image_or_build": "build { context: .., dockerfile: services/config-service/Dockerfile }",
+        "container_name": "samato-config-service",
+        "ports": ["8888:8888"],
+        "environment": {
+          "SPRING_DATASOURCE_URL": "jdbc:postgresql://postgres:5432/config",
+          "SPRING_DATASOURCE_USERNAME": "fd",
+          "SPRING_DATASOURCE_PASSWORD": "fd"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"}
+        ]
+      },
+      {
+        "name": "auth-service",
+        "image_or_build": "build { context: .., dockerfile: services/auth-service/Dockerfile }",
+        "container_name": "samato-auth-service",
+        "ports": ["9000:9000"],
+        "environment": {
+          "SPRING_DATASOURCE_URL": "jdbc:postgresql://postgres:5432/auth",
+          "SPRING_DATASOURCE_USERNAME": "fd",
+          "SPRING_DATASOURCE_PASSWORD": "fd",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"},
+          {"discovery-service": "service_started"}
+        ]
+      },
+      {
+        "name": "api-gateway",
+        "image_or_build": "build { context: .., dockerfile: services/api-gateway/Dockerfile }",
+        "container_name": "samato-api-gateway",
+        "ports": ["8080:8080"],
+        "environment": {
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/",
+          "SPRING_DATA_REDIS_HOST": "redis",
+          "SPRING_DATA_REDIS_PORT": "6379",
+          "SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI": "http://auth-service:9000/.well-known/jwks.json"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"discovery-service": "service_started"},
+          {"auth-service": "service_started"}
+        ]
+      },
+      {
+        "name": "user-service",
+        "image_or_build": "build { context: .., dockerfile: services/user-service/Dockerfile }",
+        "container_name": "samato-user-service",
+        "ports": ["8081:8081"],
+        "environment": {
+          "SPRING_DATASOURCE_URL": "jdbc:postgresql://postgres:5432/user_service",
+          "SPRING_DATASOURCE_USERNAME": "fd",
+          "SPRING_DATASOURCE_PASSWORD": "fd",
+          "SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI": "http://auth-service:9000/.well-known/jwks.json",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"},
+          {"discovery-service": "service_started"}
+        ]
+      },
+      {
+        "name": "order-service",
+        "image_or_build": "build { context: .., dockerfile: services/order-service/Dockerfile }",
+        "container_name": "samato-order-service",
+        "ports": ["8083:8083"],
+        "environment": {
+          "POSTGRES_URL": "jdbc:postgresql://postgres:5432/order_service",
+          "POSTGRES_USER": "fd",
+          "POSTGRES_PASSWORD": "fd",
+          "AUTH_JWKS_URI": "http://auth-service:9000/.well-known/jwks.json",
+          "KAFKA_BOOTSTRAP": "kafka:9094",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"},
+          {"kafka": "service_healthy"},
+          {"redis": "service_started"},
+          {"opensearch": "service_started"}
+        ]
+      },
+      {
+        "name": "payment-service",
+        "image_or_build": "build { context: .., dockerfile: services/payment-service/Dockerfile }",
+        "container_name": "samato-payment-service",
+        "ports": ["8084:8084"],
+        "environment": {
+          "POSTGRES_URL": "jdbc:postgresql://postgres:5432/payment_service",
+          "POSTGRES_USER": "fd",
+          "POSTGRES_PASSWORD": "fd",
+          "AUTH_JWKS_URI": "http://auth-service:9000/.well-known/jwks.json",
+          "KAFKA_BOOTSTRAP": "kafka:9094",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/",
+          "RAZORPAY_KEY_ID": "${RAZORPAY_KEY_ID:-rzp_test_xxxxxxxxxxxxxx}",
+          "RAZORPAY_KEY_SECRET": "${RAZORPAY_KEY_SECRET:-placeholder_secret_xxxxxxxxxxxxxx}",
+          "RAZORPAY_WEBHOOK_SECRET": "${RAZORPAY_WEBHOOK_SECRET:-placeholder_webhook_secret_xxxxxxxx}"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"},
+          {"kafka": "service_healthy"}
+        ]
+      },
+      {
+        "name": "restaurant-service",
+        "image_or_build": "build { context: .., dockerfile: services/restaurant-service/Dockerfile }",
+        "container_name": "samato-restaurant-service",
+        "ports": ["8082:8082"],
+        "environment": {
+          "SPRING_DATASOURCE_URL": "jdbc:postgresql://postgres:5432/restaurant_service",
+          "SPRING_DATASOURCE_USERNAME": "fd",
+          "SPRING_DATASOURCE_PASSWORD": "fd",
+          "SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI": "http://auth-service:9000/.well-known/jwks.json",
+          "SPRING_KAFKA_BOOTSTRAP_SERVERS": "kafka:9094",
+          "SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL": "http://schema-registry:8081",
+          "SPRING_DATA_REDIS_HOST": "redis",
+          "SPRING_DATA_REDIS_PORT": "6379",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"postgres": "service_healthy"},
+          {"kafka": "service_healthy"},
+          {"schema-registry": "service_started"},
+          {"redis": "service_started"},
+          {"opensearch": "service_started"},
+          {"discovery-service": "service_started"}
+        ]
+      },
+      {
+        "name": "search-service",
+        "image_or_build": "build { context: .., dockerfile: services/search-service/Dockerfile }",
+        "container_name": "samato-search-service",
+        "ports": ["8087:8087"],
+        "environment": {
+          "SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI": "http://auth-service:9000/.well-known/jwks.json",
+          "SPRING_KAFKA_BOOTSTRAP_SERVERS": "kafka:9094",
+          "SPRING_KAFKA_PROPERTIES_SCHEMA_REGISTRY_URL": "http://schema-registry:8081",
+          "SAMATO_OPENSEARCH_HOST": "opensearch",
+          "SAMATO_OPENSEARCH_PORT": "9200",
+          "EUREKA_CLIENT_SERVICEURL_DEFAULTZONE": "http://discovery-service:8761/eureka/"
+        },
+        "volumes": [],
+        "depends_on": [
+          {"kafka": "service_healthy"},
+          {"schema-registry": "service_started"},
+          {"opensearch": "service_started"},
+          {"discovery-service": "service_started"}
+        ]
+      }
+    ],
+    "networks": [],
+    "volumes": [
+      "samato-pgdata",
+      "samato-kafkadata",
+      "samato-redisdata",
+      "samato-promdata",
+      "samato-grafanadata",
+      "samato-osdata"
+    ],
+    "env_file": "infra/.env (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET)"
+  },
+  "databases": [
+    {"name": "fd_shared", "owner": "fd", "source": "POSTGRES_DB in compose"},
+    {"name": "config", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "discovery", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "auth", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "user_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "restaurant_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "order_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "payment_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "delivery_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "notification_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "search_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "analytics_service", "owner": "fd", "source": "init-databases.sh"},
+    {"name": "zipkin", "owner": "fd", "source": "init-databases.sh"}
+  ],
+  "prometheusTargets": [
+    {"job": "prometheus", "targets": ["localhost:9090"]},
+    {"job": "spring-boot-services", "metrics_path": "/actuator/prometheus", "targets": ["host.docker.internal:8888 (samato-config-service)", "host.docker.internal:8761 (samato-discovery-service)", "host.docker.internal:8080 (samato-api-gateway)"]},
+    {"job": "zipkin", "metrics_path": "/prometheus", "targets": ["zipkin:9411"]}
+  ],
+  "grafanaConfig": {
+    "datasource": {
+      "name": "Prometheus",
+      "type": "prometheus",
+      "url": "http://prometheus:9090",
+      "isDefault": true
+    },
+    "dashboardProvider": {
+      "name": "default",
+      "folder": "Samato",
+      "path": "/var/lib/grafana/dashboards"
+    }
+  },
+  "pomFiles": [
+    {
+      "path": "pom.xml",
+      "artifactId": "samato",
+      "groupId": "com.samato",
+      "version": "1.0.0-SNAPSHOT",
+      "packaging": "pom",
+      "modules": ["shared", "shared-kafka", "services/config-service", "services/discovery-service", "services/api-gateway", "services/auth-service", "services/user-service", "services/restaurant-service", "services/search-service", "services/order-service", "services/payment-service"],
+      "properties": {
+        "java.version": "21",
+        "spring-cloud.version": "2023.0.3",
+        "springdoc.version": "2.6.0",
+        "spring-authorization-server.version": "1.3.3",
+        "resilience4j.version": "2.2.0",
+        "postgresql.version": "42.7.4",
+        "flyway.version": "10.20.0",
+        "kafka-clients.version": "3.7.1",
+        "avro.version": "1.11.3",
+        "schema-registry.version": "7.6.1",
+        "testcontainers.version": "1.20.2"
+      },
+      "dependencies": [
+        "org.springframework.cloud:spring-cloud-dependencies (BOM import, version ${spring-cloud.version})"
+      ],
+      "plugins": [
+        "org.springframework.boot:spring-boot-maven-plugin (pluginManagement)",
+        "org.apache.avro:avro-maven-plugin (pluginManagement, version ${avro.version})"
+      ]
+    },
+    {
+      "path": "shared/pom.xml",
+      "artifactId": "shared",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "io.micrometer:micrometer-tracing-bridge-brave",
+        "io.zipkin.reporter2:zipkin-reporter-brave",
+        "org.springframework.cloud:spring-cloud-starter-openfeign",
+        "org.springframework.boot:spring-boot-starter-test (test)"
+      ],
+      "plugins": []
+    },
+    {
+      "path": "shared-kafka/pom.xml",
+      "artifactId": "shared-kafka",
+      "dependencies": [
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.kafka:spring-kafka",
+        "io.confluent:kafka-avro-serializer (${schema-registry.version})",
+        "org.apache.avro:avro (${avro.version})",
+        "org.springframework.boot:spring-boot-starter-actuator"
+      ],
+      "plugins": [
+        "org.apache.avro:avro-maven-plugin (generate-sources: schema)"
+      ]
+    },
+    {
+      "path": "services/config-service/pom.xml",
+      "artifactId": "config-service",
+      "dependencies": [
+        "org.springframework.cloud:spring-cloud-config-server",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/discovery-service/pom.xml",
+      "artifactId": "discovery-service",
+      "dependencies": [
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-server",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "org.springframework.boot:spring-boot-starter-web",
+        "com.samato:shared (1.0.0-SNAPSHOT)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/api-gateway/pom.xml",
+      "artifactId": "api-gateway",
+      "dependencies": [
+        "org.springframework.cloud:spring-cloud-starter-gateway",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.boot:spring-boot-starter-security",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "org.springframework.boot:spring-boot-starter-data-redis-reactive",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/auth-service/pom.xml",
+      "artifactId": "auth-service",
+      "dependencies": [
+        "org.springframework.security:spring-security-oauth2-authorization-server (${spring-authorization-server.version})",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-data-jpa",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.postgresql:postgresql",
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui (${springdoc.version})",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-test (test)",
+        "org.springframework.security:spring-security-test (test)",
+        "org.testcontainers:postgresql (test)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/user-service/pom.xml",
+      "artifactId": "user-service",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-data-jpa",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.postgresql:postgresql",
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "org.springframework.cloud:spring-cloud-starter-openfeign",
+        "io.github.resilience4j:resilience4j-spring-boot3 (${resilience4j.version})",
+        "org.springframework.boot:spring-boot-starter-aop",
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui (${springdoc.version})",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-test (test)",
+        "org.springframework.security:spring-security-test (test)",
+        "org.testcontainers:postgresql (test)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/restaurant-service/pom.xml",
+      "artifactId": "restaurant-service",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-data-jpa",
+        "org.springframework.boot:spring-boot-starter-data-redis",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.springframework.boot:spring-boot-starter-cache",
+        "org.postgresql:postgresql",
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "com.samato:shared-kafka (1.0.0-SNAPSHOT)",
+        "io.github.resilience4j:resilience4j-spring-boot3 (${resilience4j.version})",
+        "org.springframework.boot:spring-boot-starter-aop",
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui (${springdoc.version})",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-test (test)",
+        "org.springframework.security:spring-security-test (test)",
+        "org.testcontainers:postgresql (test)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/search-service/pom.xml",
+      "artifactId": "search-service",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.opensearch.client:opensearch-rest-high-level-client (2.15.0)",
+        "com.fasterxml.jackson.core:jackson-databind",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "com.samato:shared-kafka (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/order-service/pom.xml",
+      "artifactId": "order-service",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-data-jpa",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.postgresql:postgresql",
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "org.springframework.cloud:spring-cloud-starter-openfeign",
+        "com.samato:shared-kafka (1.0.0-SNAPSHOT)",
+        "io.github.resilience4j:resilience4j-spring-boot3 (${resilience4j.version})",
+        "org.springframework.boot:spring-boot-starter-aop",
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui (${springdoc.version})",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-test (test)",
+        "org.springframework.security:spring-security-test (test)",
+        "org.testcontainers:postgresql (test)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    },
+    {
+      "path": "services/payment-service/pom.xml",
+      "artifactId": "payment-service",
+      "dependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-data-jpa",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-oauth2-resource-server",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "org.springframework.boot:spring-boot-starter-aop",
+        "org.springframework.cloud:spring-cloud-starter-netflix-eureka-client",
+        "org.springframework.cloud:spring-cloud-starter-config",
+        "org.springframework.cloud:spring-cloud-starter-openfeign",
+        "org.postgresql:postgresql",
+        "org.flywaydb:flyway-core",
+        "org.flywaydb:flyway-database-postgresql",
+        "io.hypersistence:hypersistence-utils-hibernate-63 (${hibernate-types.version})",
+        "com.razorpay:razorpay-java (1.4.5)",
+        "io.github.resilience4j:resilience4j-spring-boot3",
+        "org.springdoc:springdoc-openapi-starter-webmvc-ui (${springdoc.version})",
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "com.samato:shared-kafka (1.0.0-SNAPSHOT)",
+        "org.springframework.boot:spring-boot-starter-test (test)",
+        "org.springframework.security:spring-security-test (test)",
+        "org.testcontainers:postgresql (test)"
+      ],
+      "plugins": ["org.springframework.boot:spring-boot-maven-plugin"]
+    }
+  ],
+  "applicationYamls": [
+    {
+      "path": "config-repo/application.yml",
+      "served_by": "config-service to ALL clients as global defaults",
+      "keys": [
+        {"line": 5, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 9, "key": "eureka.instance.prefer-ip-address", "value": "true"},
+        {"line": 10, "key": "eureka.instance.lease-renewal-interval-in-seconds", "value": "5"},
+        {"line": 11, "key": "eureka.instance.lease-expiration-duration-in-seconds", "value": "15"},
+        {"line": 14, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 18, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"}
+      ]
+    },
+    {
+      "path": "services/discovery-service/src/main/resources/application.yml",
+      "service": "discovery-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8761"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "eureka.client.register-with-eureka", "value": "false"},
+        {"line": 7, "key": "eureka.client.fetch-registry", "value": "false"},
+        {"line": 10, "key": "eureka.server.enable-self-preservation", "value": "false"},
+        {"line": 11, "key": "eureka.server.eviction-interval-timer-in-ms", "value": "5000"},
+        {"line": 12, "key": "eureka.server.wait-time-in-ms-when-sync-empty", "value": "0"},
+        {"line": 13, "key": "eureka.instance.hostname", "value": "localhost"},
+        {"line": 16, "key": "spring.application.name", "value": "samato-discovery-service"},
+        {"line": 19, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 21, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 23, "key": "management.health.livenessstate.enabled", "value": "true"},
+        {"line": 24, "key": "management.health.readinessstate.enabled", "value": "true"},
+        {"line": 25, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 27, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"},
+        {"line": 28, "key": "spring.zipkin.discovery-client-enabled", "value": "false"}
+      ]
+    },
+    {
+      "path": "services/config-service/src/main/resources/application.yml",
+      "service": "config-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8888"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-config-service"},
+        {"line": 8, "key": "spring.profiles.active", "value": "native"},
+        {"line": 10, "key": "spring.cloud.config.server.native.search-locations", "value": "file:./config-repo"},
+        {"line": 12, "key": "spring.cloud.config.server.git.uri", "value": "file:./config-repo"},
+        {"line": 13, "key": "spring.cloud.config.server.git.default-label", "value": "main"},
+        {"line": 15, "key": "spring.cloud.config.server.git.force-pull", "value": "true"},
+        {"line": 18, "key": "spring.datasource.url", "value": "jdbc:postgresql://localhost:5432/config"},
+        {"line": 19, "key": "spring.datasource.username", "value": "fd"},
+        {"line": 20, "key": "spring.datasource.password", "value": "fd"},
+        {"line": 22, "key": "spring.jpa.hibernate.ddl-auto", "value": "none"},
+        {"line": 25, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 27, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 28, "key": "management.endpoint.health.show-details", "value": "when_authorized"},
+        {"line": 29, "key": "management.health.livenessstate.enabled", "value": "true"},
+        {"line": 30, "key": "management.health.readinessstate.enabled", "value": "true"},
+        {"line": 31, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 33, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"},
+        {"line": 34, "key": "spring.zipkin.discovery-client-enabled", "value": "false"}
+      ]
+    },
+    {
+      "path": "services/api-gateway/src/main/resources/application.yml",
+      "service": "api-gateway",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8080"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-api-gateway"},
+        {"line": 8, "key": "spring.main.web-application-type", "value": "reactive"},
+        {"line": 11, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 13, "key": "spring.cloud.gateway.discovery.locator.enabled", "value": "false"},
+        {"line": 21, "key": "spring.cloud.gateway.default-filters", "value": "DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE"},
+        {"line": 23, "key": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowedOriginPatterns", "value": "*"},
+        {"line": 24, "key": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowedMethods", "value": "*"},
+        {"line": 25, "key": "spring.cloud.gateway.globalcors.cors-configurations.[/**].allowedHeaders", "value": "*"},
+        {"line": 26, "key": "spring.cloud.gateway.globalcors.cors-configurations.[/**].exposedHeaders", "value": "X-Correlation-Id"},
+        {"line": 32, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 36, "key": "eureka.instance.prefer-ip-address", "value": "true"},
+        {"line": 37, "key": "eureka.instance.lease-renewal-interval-in-seconds", "value": "5"},
+        {"line": 38, "key": "eureka.instance.lease-expiration-duration-in-seconds", "value": "15"},
+        {"line": 42, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics,gateway"},
+        {"line": 47, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 48, "key": "management.endpoint.health.show-details", "value": "always"},
+        {"line": 49, "key": "management.health.livenessstate.enabled", "value": "true"},
+        {"line": 50, "key": "management.health.readinessstate.enabled", "value": "true"},
+        {"line": 51, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 57, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"},
+        {"line": 62, "key": "logging.pattern.level", "value": "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{correlationId:-}]"},
+        {"line": 64, "key": "logging.level.org.springframework.cloud.gateway", "value": "INFO"},
+        {"line": 65, "key": "logging.level.reactor.netty", "value": "INFO"},
+        {"line": 66, "key": "logging.level.com.samato", "value": "DEBUG"}
+      ]
+    },
+    {
+      "path": "services/auth-service/src/main/resources/application.yml",
+      "service": "auth-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "9000"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-auth-service"},
+        {"line": 9, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 13, "key": "spring.profiles.active", "value": "${SPRING_PROFILES_ACTIVE:default}"},
+        {"line": 15, "key": "spring.datasource.url", "value": "jdbc:postgresql://localhost:5432/auth"},
+        {"line": 16, "key": "spring.datasource.username", "value": "fd"},
+        {"line": 17, "key": "spring.datasource.password", "value": "fd"},
+        {"line": 20, "key": "spring.jpa.hibernate.ddl-auto", "value": "validate"},
+        {"line": 23, "key": "spring.jpa.properties.hibernate.format_sql", "value": "false"},
+        {"line": 25, "key": "spring.flyway.enabled", "value": "true"},
+        {"line": 26, "key": "spring.flyway.locations", "value": "classpath:db/migration"},
+        {"line": 27, "key": "spring.flyway.baseline-on-migrate", "value": "true"},
+        {"line": 32, "key": "spring.security.oauth2.authorizationserver.access-token.format", "value": "self-contained"},
+        {"line": 33, "key": "spring.security.oauth2.authorizationserver.access-token.lifetime", "value": "PT15M"},
+        {"line": 35, "key": "spring.security.oauth2.authorizationserver.refresh-token.lifetime", "value": "P7D"},
+        {"line": 37, "key": "spring.security.oauth2.authorizationserver.grant-types.password", "value": "enabled"},
+        {"line": 38, "key": "spring.security.oauth2.authorizationserver.grant-types.refresh_token", "value": "enabled"},
+        {"line": 39, "key": "spring.security.oauth2.authorizationserver.grant-types.client_credentials", "value": "enabled"},
+        {"line": 42, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 47, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 51, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 55, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 60, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"}
+      ]
+    },
+    {
+      "path": "services/user-service/src/main/resources/application.yml",
+      "service": "user-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8081"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-user-service"},
+        {"line": 9, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 11, "key": "spring.datasource.url", "value": "jdbc:postgresql://localhost:5432/user_service"},
+        {"line": 12, "key": "spring.datasource.username", "value": "fd"},
+        {"line": 13, "key": "spring.datasource.password", "value": "fd"},
+        {"line": 15, "key": "spring.jpa.hibernate.ddl-auto", "value": "validate"},
+        {"line": 18, "key": "spring.flyway.enabled", "value": "true"},
+        {"line": 19, "key": "spring.flyway.locations", "value": "classpath:db/migration"},
+        {"line": 20, "key": "spring.flyway.baseline-on-migrate", "value": "true"},
+        {"line": 28, "key": "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "value": "http://localhost:9000/.well-known/jwks.json"},
+        {"line": 32, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 41, "key": "spring.cloud.openfeign.client.config.default.connect-timeout", "value": "2000"},
+        {"line": 42, "key": "spring.cloud.openfeign.client.config.default.read-timeout", "value": "5000"},
+        {"line": 43, "key": "spring.cloud.openfeign.client.config.default.logger-level", "value": "BASIC"},
+        {"line": 50, "key": "resilience4j.circuitbreaker.instances.authService.sliding-window-size", "value": "10"},
+        {"line": 51, "key": "resilience4j.circuitbreaker.instances.authService.failure-rate-threshold", "value": "50"},
+        {"line": 52, "key": "resilience4j.circuitbreaker.instances.authService.wait-duration-in-open-state", "value": "10s"},
+        {"line": 53, "key": "resilience4j.circuitbreaker.instances.authService.permitted-number-of-calls-in-half-open-state", "value": "3"},
+        {"line": 57, "key": "resilience4j.retry.instances.authService.max-attempts", "value": "3"},
+        {"line": 58, "key": "resilience4j.retry.instances.authService.wait-duration", "value": "500ms"},
+        {"line": 59, "key": "resilience4j.retry.instances.authService.enable-exponential-backoff", "value": "true"},
+        {"line": 60, "key": "resilience4j.retry.instances.authService.exponential-backoff-multiplier", "value": "2"},
+        {"line": 64, "key": "resilience4j.timelimiter.instances.authService.timeout-duration", "value": "3s"},
+        {"line": 70, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 73, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 76, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 80, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"}
+      ]
+    },
+    {
+      "path": "services/restaurant-service/src/main/resources/application.yml",
+      "service": "restaurant-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8082"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-restaurant-service"},
+        {"line": 9, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 11, "key": "spring.datasource.url", "value": "jdbc:postgresql://localhost:5432/restaurant_service"},
+        {"line": 12, "key": "spring.datasource.username", "value": "fd"},
+        {"line": 13, "key": "spring.datasource.password", "value": "fd"},
+        {"line": 15, "key": "spring.jpa.hibernate.ddl-auto", "value": "validate"},
+        {"line": 18, "key": "spring.flyway.enabled", "value": "true"},
+        {"line": 19, "key": "spring.flyway.locations", "value": "classpath:db/migration"},
+        {"line": 20, "key": "spring.flyway.baseline-on-migrate", "value": "true"},
+        {"line": 28, "key": "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "value": "http://localhost:9000/.well-known/jwks.json"},
+        {"line": 33, "key": "spring.data.redis.host", "value": "localhost"},
+        {"line": 34, "key": "spring.data.redis.port", "value": "6379"},
+        {"line": 35, "key": "spring.data.redis.timeout", "value": "1s"},
+        {"line": 39, "key": "spring.kafka.bootstrap-servers", "value": "localhost:9092"},
+        {"line": 41, "key": "spring.kafka.properties.schema.registry.url", "value": "http://localhost:8085"},
+        {"line": 43, "key": "spring.kafka.producer.acks", "value": "all"},
+        {"line": 45, "key": "spring.kafka.producer.properties.enable.idempotence", "value": "true"},
+        {"line": 46, "key": "spring.kafka.producer.properties.compression.type", "value": "lz4"},
+        {"line": 48, "key": "spring.kafka.consumer.group-id", "value": "samato-restaurant-service"},
+        {"line": 49, "key": "spring.kafka.consumer.auto-offset-reset", "value": "earliest"},
+        {"line": 51, "key": "spring.kafka.consumer.properties.specific.avro.reader", "value": "true"},
+        {"line": 56, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 61, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 64, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 68, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 72, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"}
+      ]
+    },
+    {
+      "path": "services/search-service/src/main/resources/application.yml",
+      "service": "search-service",
+      "keys": [
+        {"line": 2, "key": "server.port", "value": "8087"},
+        {"line": 3, "key": "server.shutdown", "value": "graceful"},
+        {"line": 6, "key": "spring.application.name", "value": "samato-search-service"},
+        {"line": 9, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 15, "key": "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "value": "http://localhost:9000/.well-known/jwks.json"},
+        {"line": 17, "key": "spring.kafka.bootstrap-servers", "value": "localhost:9092"},
+        {"line": 19, "key": "spring.kafka.properties.schema.registry.url", "value": "http://localhost:8085"},
+        {"line": 21, "key": "spring.kafka.consumer.group-id", "value": "samato-search-service"},
+        {"line": 22, "key": "spring.kafka.consumer.auto-offset-reset", "value": "earliest"},
+        {"line": 23, "key": "spring.kafka.consumer.enable-auto-commit", "value": "false"},
+        {"line": 25, "key": "spring.kafka.consumer.properties.specific.avro.reader", "value": "true"},
+        {"line": 26, "key": "spring.kafka.consumer.properties.max.poll.records", "value": "50"},
+        {"line": 28, "key": "spring.kafka.listener.ack-mode", "value": "manual_immediate"},
+        {"line": 32, "key": "samato.opensearch.host", "value": "localhost"},
+        {"line": 33, "key": "samato.opensearch.port", "value": "9200"},
+        {"line": 38, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 44, "key": "management.endpoints.web.exposure.include", "value": "health,info,prometheus,metrics"},
+        {"line": 47, "key": "management.endpoint.health.probes.enabled", "value": "true"},
+        {"line": 51, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 54, "key": "management.zipkin.tracing.endpoint", "value": "http://localhost:9411/api/v2/spans"}
+      ]
+    },
+    {
+      "path": "services/order-service/src/main/resources/application.yml",
+      "service": "order-service",
+      "keys": [
+        {"line": 3, "key": "spring.application.name", "value": "samato-order-service"},
+        {"line": 5, "key": "spring.profiles.active", "value": "${SPRING_PROFILES_ACTIVE:default}"},
+        {"line": 7, "key": "spring.config.import", "value": "optional:configserver:http://localhost:8888"},
+        {"line": 10, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 12, "key": "spring.datasource.url", "value": "${POSTGRES_URL:jdbc:postgresql://localhost:5432/order_service}"},
+        {"line": 13, "key": "spring.datasource.username", "value": "${POSTGRES_USER:fd}"},
+        {"line": 14, "key": "spring.datasource.password", "value": "${POSTGRES_PASSWORD:fd}"},
+        {"line": 16, "key": "spring.datasource.hikari.maximum-pool-size", "value": "20"},
+        {"line": 17, "key": "spring.datasource.hikari.minimum-idle", "value": "5"},
+        {"line": 20, "key": "spring.jpa.hibernate.ddl-auto", "value": "validate"},
+        {"line": 23, "key": "spring.jpa.properties.hibernate.jdbc.time_zone", "value": "UTC"},
+        {"line": 24, "key": "spring.jpa.properties.hibernate.format_sql", "value": "false"},
+        {"line": 26, "key": "spring.flyway.enabled", "value": "true"},
+        {"line": 27, "key": "spring.flyway.locations", "value": "classpath:db/migration"},
+        {"line": 28, "key": "spring.flyway.baseline-on-migrate", "value": "true"},
+        {"line": 33, "key": "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "value": "${AUTH_JWKS_URI:http://localhost:9000/.well-known/jwks.json}"},
+        {"line": 35, "key": "spring.kafka.bootstrap-servers", "value": "${KAFKA_BOOTSTRAP:localhost:9092}"},
+        {"line": 37, "key": "spring.kafka.producer.key-serializer", "value": "org.apache.kafka.common.serialization.StringSerializer"},
+        {"line": 38, "key": "spring.kafka.producer.value-serializer", "value": "org.apache.kafka.common.serialization.ByteArraySerializer"},
+        {"line": 39, "key": "spring.kafka.producer.acks", "value": "all"},
+        {"line": 41, "key": "spring.kafka.producer.properties.enable.idempotence", "value": "true"},
+        {"line": 42, "key": "spring.kafka.producer.properties.max.in.flight.requests.per.connection", "value": "5"},
+        {"line": 43, "key": "spring.kafka.producer.properties.compression.type", "value": "lz4"},
+        {"line": 46, "key": "server.port", "value": "8083"},
+        {"line": 48, "key": "server.error.include-message", "value": "always"},
+        {"line": 49, "key": "server.error.include-binding-errors", "value": "always"},
+        {"line": 54, "key": "management.endpoints.web.exposure.include", "value": "health,info,metrics,prometheus"},
+        {"line": 58, "key": "management.endpoint.health.show-details", "value": "when-authorized"},
+        {"line": 61, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 65, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 67, "key": "eureka.instance.instance-id", "value": "${spring.application.name}:${server.port}"},
+        {"line": 68, "key": "eureka.instance.prefer-ip-address", "value": "true"},
+        {"line": 72, "key": "samato.outbox.poll-ms", "value": "500"},
+        {"line": 74, "key": "samato.saga.poll-ms", "value": "1000"},
+        {"line": 76, "key": "samato.resilience4j.restaurant-client.circuit-breaker.failure-rate-threshold", "value": "50"},
+        {"line": 77, "key": "samato.resilience4j.restaurant-client.circuit-breaker.wait-duration-in-open-state", "value": "10s"},
+        {"line": 78, "key": "samato.resilience4j.restaurant-client.circuit-breaker.sliding-window-size", "value": "10"},
+        {"line": 79, "key": "samato.resilience4j.restaurant-client.circuit-breaker.minimum-number-of-calls", "value": "5"},
+        {"line": 81, "key": "samato.resilience4j.restaurant-client.retry.max-attempts", "value": "3"},
+        {"line": 82, "key": "samato.resilience4j.restaurant-client.retry.wait-duration", "value": "200ms"}
+      ]
+    },
+    {
+      "path": "services/payment-service/src/main/resources/application.yml",
+      "service": "payment-service",
+      "keys": [
+        {"line": 3, "key": "spring.application.name", "value": "samato-payment-service"},
+        {"line": 5, "key": "spring.profiles.active", "value": "${SPRING_PROFILES_ACTIVE:default}"},
+        {"line": 7, "key": "spring.config.import", "value": "optional:configserver:http://localhost:8888"},
+        {"line": 10, "key": "spring.cloud.config.enabled", "value": "false"},
+        {"line": 12, "key": "spring.datasource.url", "value": "${POSTGRES_URL:jdbc:postgresql://localhost:5432/payment_service}"},
+        {"line": 13, "key": "spring.datasource.username", "value": "${POSTGRES_USER:fd}"},
+        {"line": 14, "key": "spring.datasource.password", "value": "${POSTGRES_PASSWORD:fd}"},
+        {"line": 16, "key": "spring.datasource.hikari.maximum-pool-size", "value": "20"},
+        {"line": 17, "key": "spring.datasource.hikari.minimum-idle", "value": "5"},
+        {"line": 20, "key": "spring.jpa.hibernate.ddl-auto", "value": "validate"},
+        {"line": 23, "key": "spring.jpa.properties.hibernate.jdbc.time_zone", "value": "UTC"},
+        {"line": 24, "key": "spring.jpa.properties.hibernate.format_sql", "value": "false"},
+        {"line": 26, "key": "spring.flyway.enabled", "value": "true"},
+        {"line": 27, "key": "spring.flyway.locations", "value": "classpath:db/migration"},
+        {"line": 28, "key": "spring.flyway.baseline-on-migrate", "value": "true"},
+        {"line": 33, "key": "spring.security.oauth2.resourceserver.jwt.jwk-set-uri", "value": "${AUTH_JWKS_URI:http://localhost:9000/.well-known/jwks.json}"},
+        {"line": 35, "key": "spring.kafka.bootstrap-servers", "value": "${KAFKA_BOOTSTRAP:localhost:9092}"},
+        {"line": 37, "key": "spring.kafka.producer.key-serializer", "value": "org.apache.kafka.common.serialization.StringSerializer"},
+        {"line": 38, "key": "spring.kafka.producer.value-serializer", "value": "org.apache.kafka.common.serialization.ByteArraySerializer"},
+        {"line": 39, "key": "spring.kafka.producer.acks", "value": "all"},
+        {"line": 41, "key": "spring.kafka.producer.properties.enable.idempotence", "value": "true"},
+        {"line": 42, "key": "spring.kafka.producer.properties.max.in.flight.requests.per.connection", "value": "5"},
+        {"line": 43, "key": "spring.kafka.producer.properties.compression.type", "value": "lz4"},
+        {"line": 46, "key": "server.port", "value": "8084"},
+        {"line": 48, "key": "server.error.include-message", "value": "always"},
+        {"line": 49, "key": "server.error.include-binding-errors", "value": "always"},
+        {"line": 55, "key": "management.endpoints.web.exposure.include", "value": "health,info,metrics,prometheus"},
+        {"line": 58, "key": "management.endpoint.health.show-details", "value": "when-authorized"},
+        {"line": 61, "key": "management.tracing.sampling.probability", "value": "1.0"},
+        {"line": 65, "key": "eureka.client.service-url.defaultZone", "value": "http://localhost:8761/eureka/"},
+        {"line": 67, "key": "eureka.instance.instance-id", "value": "${spring.application.name}:${server.port}"},
+        {"line": 68, "key": "eureka.instance.prefer-ip-address", "value": "true"},
+        {"line": 76, "key": "razorpay.key_id", "value": "${RAZORPAY_KEY_ID:rzp_test_xxxxxxxxxxxxxx}"},
+        {"line": 77, "key": "razorpay.key_secret", "value": "${RAZORPAY_KEY_SECRET:placeholder_secret_xxxxxxxxxxxxxx}"},
+        {"line": 78, "key": "razorpay.webhook_secret", "value": "${RAZORPAY_WEBHOOK_SECRET:placeholder_webhook_secret_xxxxxxxx}"},
+        {"line": 82, "key": "samato.outbox.poll-ms", "value": "500"},
+        {"line": 84, "key": "samato.snapshot.every-n-events", "value": "50"},
+        {"line": 87, "key": "samato.resilience4j.razorpay-client.circuit-breaker.failure-rate-threshold", "value": "50"},
+        {"line": 88, "key": "samato.resilience4j.razorpay-client.circuit-breaker.wait-duration-in-open-state", "value": "10s"},
+        {"line": 89, "key": "samato.resilience4j.razorpay-client.circuit-breaker.sliding-window-size", "value": "10"},
+        {"line": 90, "key": "samato.resilience4j.razorpay-client.circuit-breaker.minimum-number-of-calls", "value": "5"},
+        {"line": 92, "key": "samato.resilience4j.razorpay-client.retry.max-attempts", "value": "3"},
+        {"line": 93, "key": "samato.resilience4j.razorpay-client.retry.wait-duration", "value": "200ms"}
+      ]
+    }
+  ],
+  "notes": [
+    "Found 12 pom.xml files (root + 11 modules: shared, shared-kafka, services/{config,discovery,api-gateway,auth,user,restaurant,search,order,payment}-service). order-service directory exists but contains only src/ tree; its pom.xml was read in full.",
+    "Found 10 application.yml files (config-repo + 9 service-level yml files: discovery, config, api-gateway, auth, user, restaurant, search, order, payment).",
+    "services/order-service/ has an application.yml but lives outside services/; it's the tenth service-level file.",
+    "Grafana provisioning folder contains datasource.yml (Prometheus @ http://prometheus:9090) and dashboard.yml (provider pointing at /var/lib/grafana/dashboards, folder 'Samato').",
+    "docker-compose.yml declares no top-level networks; Docker default bridge is used. Six named volumes: samato-pgdata, samato-kafkadata, samato-redisdata, samato-promdata, samato-grafanadata, samato-osdata.",
+    "Payment service is the only consumer of .env (RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET via ${VAR:-default} interpolation). .env file is gitignored (per comment in .env.example).",
+    "init-databases.sh creates 13 DBs total (fd_shared is set via POSTGRES_DB env, the other 12 are scripted: config, discovery, auth, user_service, restaurant_service, order_service, payment_service, delivery_service, notification_service, search_service, analytics_service, zipkin).",
+    "Prometheus scrape job 'spring-boot-services' lists only 3 hosts (config, discovery, api-gateway) using host.docker.internal; all other services (user, restaurant, search, order, payment, auth) are NOT explicitly scraped — the comment says 'service discovery via DNS' but the static_configs block does not list them.",
+    "keycloak container is gated by the 'auth' profile (profiles: [\"auth\"]); it does not start with `docker compose up` without --profile auth."
+  ]
+}

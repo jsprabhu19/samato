@@ -1,0 +1,391 @@
+{
+  "shared": {
+    "files": [
+      {
+        "path": "shared/src/main/java/com/samato/shared/errors/DomainException.java",
+        "package": "com.samato.shared.errors",
+        "className": "DomainException",
+        "kind": "exception (RuntimeException)",
+        "annotations": [],
+        "publicFields": [],
+        "publicMethods": [
+          "DomainException(String code, String message, int httpStatus)",
+          "DomainException(String code, String message, int httpStatus, Throwable cause)",
+          "String getCode()",
+          "int getHttpStatus()"
+        ],
+        "extendsOrImplements": ["RuntimeException"],
+        "importedBy": [
+          "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantUnavailableException.java (extends)",
+          "services/order-service/src/main/java/com/samato/orderservice/service/OrderService.java",
+          "services/order-service/src/main/java/com/samato/orderservice/web/OrderController.java",
+          "services/auth-service/src/main/java/com/samato/authservice/web/RegistrationController.java",
+          "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/RestaurantService.java",
+          "services/user-service/src/main/java/com/samato/userservice/client/AuthClient.java",
+          "services/user-service/src/main/java/com/samato/userservice/client/AuthClientFallback.java",
+          "services/user-service/src/main/java/com/samato/userservice/web/CustomerProfileController.java"
+        ]
+      },
+      {
+        "path": "shared/src/main/java/com/samato/shared/errors/GlobalExceptionHandler.java",
+        "package": "com.samato.shared.errors",
+        "className": "GlobalExceptionHandler",
+        "kind": "class",
+        "annotations": ["@RestControllerAdvice"],
+        "publicFields": [],
+        "publicMethods": [
+          "ResponseEntity<Map<String,Object>> handleDomain(DomainException ex)",
+          "ResponseEntity<Map<String,Object>> handleValidation(MethodArgumentNotValidException ex)",
+          "ResponseEntity<Map<String,Object>> handleUnknown(Exception ex)"
+        ],
+        "extendsOrImplements": [],
+        "importedBy": []
+      },
+      {
+        "path": "shared/src/main/java/com/samato/shared/observability/CorrelationIdFilter.java",
+        "package": "com.samato.shared.observability",
+        "className": "CorrelationIdFilter",
+        "kind": "class",
+        "annotations": ["@Component", "@Order(Ordered.HIGHEST_PRECEDENCE)"],
+        "publicFields": [
+          "public static final String HEADER = \"X-Correlation-Id\""
+        ],
+        "publicMethods": [
+          "void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)"
+        ],
+        "extendsOrImplements": ["OncePerRequestFilter"],
+        "importedBy": [
+          "services/api-gateway/src/main/java/com/samato/apigateway/config/CorrelationIdWebFilter.java (references HEADER constant)"
+        ]
+      },
+      {
+        "path": "shared/src/main/java/com/samato/shared/observability/FeignCorrelationIdInterceptor.java",
+        "package": "com.samato.shared.observability",
+        "className": "FeignCorrelationIdInterceptor",
+        "kind": "class",
+        "annotations": [],
+        "publicFields": [],
+        "publicMethods": [
+          "void apply(RequestTemplate template)"
+        ],
+        "extendsOrImplements": ["feign.RequestInterceptor"],
+        "importedBy": [
+          "services/order-service/src/main/java/com/samato/orderservice/api/FeignAuthForwarder.java (bean)",
+          "services/user-service/src/main/java/com/samato/userservice/config/FeignConfig.java (bean)"
+        ]
+      },
+      {
+        "path": "shared/src/main/java/com/samato/shared/observability/MdcKeys.java",
+        "package": "com.samato.shared.observability",
+        "className": "MdcKeys",
+        "kind": "class (final, utility)",
+        "annotations": [],
+        "publicFields": [
+          "public static final String USER_ID = \"userId\"",
+          "public static final String CORRELATION_ID = \"correlationId\"",
+          "public static final String TRACE_ID = \"traceId\"",
+          "public static final String SPAN_ID = \"spanId\""
+        ],
+        "publicMethods": [
+          "static String newCorrelationId()"
+        ],
+        "extendsOrImplements": [],
+        "importedBy": [
+          "services/api-gateway/src/main/java/com/samato/apigateway/config/CorrelationIdWebFilter.java",
+          "shared-kafka/src/main/java/com/samato/sharedkafka/observability/KafkaMdcProducerInterceptor.java",
+          "shared-kafka/src/main/java/com/samato/sharedkafka/observability/MdcContext.java"
+        ]
+      }
+    ]
+  },
+  "sharedKafka": {
+    "files": [
+      {
+        "path": "shared-kafka/src/main/java/com/samato/sharedkafka/events/DomainEvent.java",
+        "package": "com.samato.sharedkafka.events",
+        "className": "DomainEvent",
+        "kind": "interface (marker)",
+        "annotations": [],
+        "publicFields": [],
+        "publicMethods": [],
+        "extendsOrImplements": ["org.apache.avro.specific.SpecificRecord"],
+        "importedBy": []
+      },
+      {
+        "path": "shared-kafka/src/main/java/com/samato/sharedkafka/config/KafkaConsumerConfig.java",
+        "package": "com.samato.sharedkafka.config",
+        "className": "KafkaConsumerConfig",
+        "kind": "class",
+        "annotations": ["@Configuration"],
+        "publicFields": [],
+        "publicMethods": [
+          "ConsumerFactory<String,SpecificRecord> consumerFactory()",
+          "ConcurrentKafkaListenerContainerFactory<String,SpecificRecord> kafkaListenerContainerFactory(ConsumerFactory<String,SpecificRecord> cf)"
+        ],
+        "extendsOrImplements": [],
+        "importedBy": []
+      },
+      {
+        "path": "shared-kafka/src/main/java/com/samato/sharedkafka/config/KafkaProducerConfig.java",
+        "package": "com.samato.sharedkafka.config",
+        "className": "KafkaProducerConfig",
+        "kind": "class",
+        "annotations": ["@Configuration"],
+        "publicFields": [],
+        "publicMethods": [
+          "ProducerFactory<String,SpecificRecord> producerFactory()",
+          "KafkaTemplate<String,SpecificRecord> kafkaTemplate(ProducerFactory<String,SpecificRecord> pf)"
+        ],
+        "extendsOrImplements": [],
+        "importedBy": []
+      },
+      {
+        "path": "shared-kafka/src/main/java/com/samato/sharedkafka/observability/KafkaMdcProducerInterceptor.java",
+        "package": "com.samato.sharedkafka.observability",
+        "className": "KafkaMdcProducerInterceptor",
+        "kind": "class",
+        "annotations": [],
+        "publicFields": [],
+        "publicMethods": [
+          "ProducerRecord<Object,Object> onSend(ProducerRecord<Object,Object> record)",
+          "void onAcknowledgement(RecordMetadata m, Exception e)",
+          "void close()",
+          "void configure(Map<String,?> configs)"
+        ],
+        "extendsOrImplements": ["org.apache.kafka.clients.producer.ProducerInterceptor<Object,Object>"],
+        "importedBy": [
+          "shared-kafka/src/main/java/com/samato/sharedkafka/config/KafkaProducerConfig.java (registered via class name)"
+        ]
+      },
+      {
+        "path": "shared-kafka/src/main/java/com/samato/sharedkafka/observability/MdcContext.java",
+        "package": "com.samato.sharedkafka.observability",
+        "className": "MdcContext",
+        "kind": "class (final)",
+        "annotations": [],
+        "publicFields": [],
+        "publicMethods": [
+          "static MdcContext fromKafka(ConsumerRecord<?,?> record)",
+          "static MdcContext fresh()",
+          "void close()"
+        ],
+        "extendsOrImplements": ["AutoCloseable"],
+        "importedBy": [
+          "services/search-service/src/main/java/com/samato/searchservice/projection/RestaurantEventListener.java"
+        ]
+      }
+    ]
+  },
+  "kafka": {
+    "schemas": [
+      {
+        "avscFile": "shared-kafka/src/main/avro/RestaurantCreatedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "RestaurantCreatedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/RestaurantCreatedEvent.java",
+        "fields": [
+          {"name": "eventId",      "type": "string"},
+          {"name": "occurredAt",   "type": "long"},
+          {"name": "restaurantId", "type": "string"},
+          {"name": "ownerId",      "type": "string"},
+          {"name": "name",         "type": "string"},
+          {"name": "description",  "type": ["null", "string"], "default": null},
+          {"name": "cuisine",      "type": "string"},
+          {"name": "address",      "type": "string"},
+          {"name": "city",         "type": "string"},
+          {"name": "latitude",     "type": "double"},
+          {"name": "longitude",    "type": "double"}
+        ],
+        "topic": "samato.restaurant.created",
+        "producedBy": [
+          "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/Outbox.java (KafkaTemplate<String,SpecificRecord>.send in @Scheduled publishPending)"
+        ],
+        "consumedBy": [
+          "services/search-service/src/main/java/com/samato/searchservice/projection/RestaurantEventListener.java (@KafkaListener, groupId=samato-search-service)"
+        ]
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/RestaurantUpdatedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "RestaurantUpdatedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/RestaurantUpdatedEvent.java",
+        "fields": [
+          {"name": "eventId",      "type": "string"},
+          {"name": "occurredAt",   "type": "long"},
+          {"name": "restaurantId", "type": "string"},
+          {"name": "name",         "type": "string"},
+          {"name": "description",  "type": ["null", "string"], "default": null},
+          {"name": "cuisine",      "type": "string"},
+          {"name": "address",      "type": "string"},
+          {"name": "city",         "type": "string"},
+          {"name": "latitude",     "type": "double"},
+          {"name": "longitude",    "type": "double"}
+        ],
+        "topic": "samato.restaurant.updated",
+        "producedBy": [
+          "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/Outbox.java"
+        ],
+        "consumedBy": [
+          "services/search-service/src/main/java/com/samato/searchservice/projection/RestaurantEventListener.java (@KafkaListener, same listener as restaurant.created)"
+        ]
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/OrderPlacedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "OrderPlacedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/OrderPlacedEvent.java",
+        "fields": [
+          {"name": "eventId",      "type": "string"},
+          {"name": "occurredAt",   "type": "long"},
+          {"name": "orderId",      "type": "string"},
+          {"name": "customerId",   "type": "string"},
+          {"name": "restaurantId", "type": "string"},
+          {"name": "totalAmount",  "type": "double"},
+          {"name": "currency",     "type": "string"},
+          {"name": "itemCount",    "type": "int"}
+        ],
+        "topic": "samato.order.placed",
+        "producedBy": [
+          "services/order-service/src/main/java/com/samato/orderservice/outbox/OutboxPublisher.java (appendOrderPlaced; published via KafkaTemplate<String,byte[]> from outbox bytes — JSON-String of Avro.toString, NOT Schema-Registry-encoded)"
+        ],
+        "consumedBy": []
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/OrderConfirmedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "OrderConfirmedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/OrderConfirmedEvent.java",
+        "fields": [
+          {"name": "eventId",      "type": "string"},
+          {"name": "occurredAt",   "type": "long"},
+          {"name": "orderId",      "type": "string"},
+          {"name": "customerId",   "type": "string"},
+          {"name": "restaurantId", "type": "string"},
+          {"name": "totalAmount",  "type": "double"},
+          {"name": "currency",     "type": "string"}
+        ],
+        "topic": "samato.order.confirmed",
+        "producedBy": [
+          "services/order-service/src/main/java/com/samato/orderservice/outbox/OutboxPublisher.java (appendOrderConfirmed; outbox stores Avro.toString JSON bytes)"
+        ],
+        "consumedBy": []
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/OrderCancelledEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "OrderCancelledEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/OrderCancelledEvent.java",
+        "fields": [
+          {"name": "eventId",    "type": "string"},
+          {"name": "occurredAt", "type": "long"},
+          {"name": "orderId",    "type": "string"},
+          {"name": "customerId", "type": "string"},
+          {"name": "reason",     "type": "string"}
+        ],
+        "topic": "samato.order.cancelled",
+        "producedBy": [
+          "services/order-service/src/main/java/com/samato/orderservice/outbox/OutboxPublisher.java (appendOrderCancelled)"
+        ],
+        "consumedBy": []
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/PaymentChargedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "PaymentChargedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/PaymentChargedEvent.java",
+        "fields": [
+          {"name": "eventId",           "type": "string"},
+          {"name": "occurredAt",        "type": "long"},
+          {"name": "paymentId",         "type": "string"},
+          {"name": "orderId",           "type": "string"},
+          {"name": "customerId",        "type": "string"},
+          {"name": "razorpayOrderId",   "type": "string"},
+          {"name": "razorpayPaymentId", "type": "string"},
+          {"name": "amount",            "type": "string"},
+          {"name": "currency",          "type": "string"}
+        ],
+        "topic": "samato.payment.charged",
+        "producedBy": [
+          "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentCommandHandler.java (topic mapping; actual producer is services/payment-service/src/main/java/com/samato/paymentservice/outbox/OutboxPublisher.java via KafkaTemplate<String,byte[]>)"
+        ],
+        "consumedBy": []
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/PaymentFailedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "PaymentFailedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/PaymentFailedEvent.java",
+        "fields": [
+          {"name": "eventId",          "type": "string"},
+          {"name": "occurredAt",       "type": "long"},
+          {"name": "paymentId",        "type": "string"},
+          {"name": "orderId",          "type": "string"},
+          {"name": "customerId",       "type": "string"},
+          {"name": "razorpayOrderId",  "type": "string"},
+          {"name": "errorCode",        "type": "string"},
+          {"name": "errorDescription", "type": "string"},
+          {"name": "amount",           "type": "string"},
+          {"name": "currency",         "type": "string"}
+        ],
+        "topic": "samato.payment.failed",
+        "producedBy": [
+          "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentCommandHandler.java (topic mapping)"
+        ],
+        "consumedBy": []
+      },
+      {
+        "avscFile": "shared-kafka/src/main/avro/PaymentRefundedEvent.avsc",
+        "namespace": "com.samato.events",
+        "name": "PaymentRefundedEvent",
+        "generatedClass": "shared-kafka/target/generated-sources/avro/com/samato/events/PaymentRefundedEvent.java",
+        "fields": [
+          {"name": "eventId",         "type": "string"},
+          {"name": "occurredAt",      "type": "long"},
+          {"name": "paymentId",       "type": "string"},
+          {"name": "orderId",         "type": "string"},
+          {"name": "customerId",      "type": "string"},
+          {"name": "razorpayOrderId", "type": "string"},
+          {"name": "razorpayRefundId","type": "string"},
+          {"name": "amount",          "type": "string"},
+          {"name": "currency",        "type": "string"}
+        ],
+        "topic": "samato.payment.refunded",
+        "producedBy": [
+          "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentCommandHandler.java (topic mapping for RefundCompleted)"
+        ],
+        "consumedBy": []
+      }
+    ]
+  },
+  "pom": {
+    "shared": {
+      "groupId": "com.samato",
+      "artifactId": "shared",
+      "version": "1.0.0-SNAPSHOT",
+      "keyDependencies": [
+        "org.springframework.boot:spring-boot-starter-web",
+        "org.springframework.boot:spring-boot-starter-validation",
+        "org.springframework.boot:spring-boot-starter-actuator",
+        "io.micrometer:micrometer-tracing-bridge-brave",
+        "io.zipkin.reporter2:zipkin-reporter-brave",
+        "org.springframework.cloud:spring-cloud-starter-openfeign",
+        "org.springframework.boot:spring-boot-starter-test (test scope)"
+      ]
+    },
+    "sharedKafka": {
+      "groupId": "com.samato",
+      "artifactId": "shared-kafka",
+      "version": "1.0.0-SNAPSHOT",
+      "keyDependencies": [
+        "com.samato:shared (1.0.0-SNAPSHOT)",
+        "org.springframework.kafka:spring-kafka",
+        "io.confluent:kafka-avro-serializer (${schema-registry.version})",
+        "org.apache.avro:avro (${avro.version})",
+        "org.springframework.boot:spring-boot-starter-actuator"
+      ],
+      "buildPlugins": [
+        "org.apache.avro:avro-maven-plugin — generates Java from src/main/avro/*.avsc into target/generated-sources/avro/ (stringType=String)"
+      ]
+    }
+  }
+}

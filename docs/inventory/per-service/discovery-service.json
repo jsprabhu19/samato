@@ -1,0 +1,21 @@
+{
+  "service": "discovery-service",
+  "modulePath": "services/discovery-service",
+  "files": [
+    {
+      "path": "services/discovery-service/src/main/java/com/samato/discoveryservice/DiscoveryServiceApplication.java",
+      "package": "com.samato.discoveryservice",
+      "className": "DiscoveryServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableEurekaServer"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    }
+  ],
+  "migrations": [],
+  "endpoints": [],
+  "javaFileCount": 1
+}

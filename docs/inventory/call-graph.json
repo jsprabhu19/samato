@@ -1,0 +1,446 @@
+{
+  "feignClients": [
+    {
+      "declaredIn": "services/order-service/src/main/java/com/samato/orderservice/api/PaymentClient.java",
+      "targetService": "payment-service",
+      "name": "samato-payment-service",
+      "fallbackFactory": "com.samato.orderservice.api.PaymentClientFallback",
+      "methods": [
+        {
+          "name": "createOrder",
+          "http": "POST /api/payments/orders",
+          "headers": ["Idempotency-Key"],
+          "body": "PaymentDtos.CreatePaymentRequest",
+          "returns": "PaymentDtos.PaymentResponse"
+        },
+        {
+          "name": "refund",
+          "http": "POST /api/payments/{id}/refunds",
+          "pathVars": ["id (UUID)"],
+          "headers": ["Idempotency-Key"],
+          "body": "PaymentDtos.RefundRequest",
+          "returns": "PaymentDtos.PaymentResponse"
+        },
+        {
+          "name": "get",
+          "http": "GET /api/payments/{id}",
+          "pathVars": ["id (UUID)"],
+          "returns": "PaymentDtos.PaymentResponse"
+        }
+      ],
+      "usedIn": [
+        "services/order-service/src/main/java/com/samato/orderservice/saga/SagaEngine.java (CHARGE_PAYMENT step + compensation)"
+      ]
+    },
+    {
+      "declaredIn": "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantClient.java",
+      "targetService": "restaurant-service",
+      "name": "samato-restaurant-service",
+      "fallbackFactory": "com.samato.orderservice.api.RestaurantClientFallback",
+      "methods": [
+        {
+          "name": "getRestaurant",
+          "http": "GET /api/restaurants/{id}",
+          "pathVars": ["id (UUID)"],
+          "returns": "RestaurantDtos.RestaurantSummary"
+        },
+        {
+          "name": "getMenu",
+          "http": "GET /api/restaurants/{id}/menu",
+          "pathVars": ["id (UUID)"],
+          "queryParams": ["ids (csv)"],
+          "returns": "RestaurantDtos.MenuResponse"
+        }
+      ],
+      "usedIn": [
+        "services/order-service/src/main/java/com/samato/orderservice/saga/SagaEngine.java (VALIDATE_RESTAURANT + VALIDATE_ITEMS steps)"
+      ]
+    },
+    {
+      "declaredIn": "services/user-service/src/main/java/com/samato/userservice/client/AuthClient.java",
+      "targetService": "auth-service",
+      "name": "samato-auth-service",
+      "fallback": "com.samato.userservice.client.AuthClientFallback",
+      "methods": [
+        {
+          "name": "me",
+          "http": "GET /api/auth/me",
+          "headers": ["Authorization (Bearer)"],
+          "returns": "AuthMeResponse (record: id, email, roles)"
+        }
+      ],
+      "usedIn": [
+        "services/user-service (user lookup against auth-service)"
+      ]
+    }
+  ],
+  "kafkaListeners": [
+    {
+      "service": "search-service",
+      "listenerClass": "com.samato.searchservice.projection.RestaurantEventListener",
+      "method": "onEvent",
+      "topics": [
+        "samato.restaurant.created",
+        "samato.restaurant.updated"
+      ],
+      "group": "samato-search-service",
+      "containerFactory": "(default: ConcurrentKafkaListenerContainerFactory<String, SpecificRecord> from shared-kafka KafkaConsumerConfig; manual ack mode, SpecificRecord Avro deserializer)",
+      "summary": "Consumes restaurant created/updated Avro events and projects them into OpenSearch (idempotent upsert by restaurantId); only acks after the projection succeeds."
+    }
+  ],
+  "kafkaProducers": [
+    {
+      "service": "order-service",
+      "publisherClass": "com.samato.orderservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (bean: byteArrayKafkaTemplate in com.samato.orderservice.config.KafkaByteArrayConfig)",
+      "topic": "samato.order.placed",
+      "key": "orderId (aggregate id, used as partition key)",
+      "payloadType": "OrderPlacedEvent (Avro; pre-serialized to UTF-8 bytes before outbox insert)",
+      "sendCall": "kafka.send(new ProducerRecord<>(topic, aggregateId.toString(), payload)) in OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "order-service",
+      "publisherClass": "com.samato.orderservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.order.confirmed",
+      "key": "orderId",
+      "payloadType": "OrderConfirmedEvent (Avro, pre-serialized)",
+      "sendCall": "kafka.send(new ProducerRecord<>(topic, aggregateId.toString(), payload)) in OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "order-service",
+      "publisherClass": "com.samato.orderservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.order.cancelled",
+      "key": "orderId",
+      "payloadType": "OrderCancelledEvent (Avro, pre-serialized)",
+      "sendCall": "kafka.send(new ProducerRecord<>(topic, aggregateId.toString(), payload)) in OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (bean: byteArrayKafkaTemplate in com.samato.paymentservice.config.KafkaByteArrayConfig)",
+      "topic": "samato.payment.created",
+      "key": "paymentId (aggregateId from outbox row)",
+      "payloadType": "RazorpayOrderCreated event data (raw JSON bytes from event store)",
+      "sendCall": "kafkaTemplate.send(e.getTopic(), e.getAggregateId().toString(), e.getPayload()).get(5, SECONDS) in OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.payment.charged",
+      "key": "paymentId",
+      "payloadType": "PaymentCaptured event data (raw JSON bytes)",
+      "sendCall": "kafkaTemplate.send(topic, aggregateId, payload) via OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.payment.failed",
+      "key": "paymentId",
+      "payloadType": "PaymentFailed event data (raw JSON bytes)",
+      "sendCall": "kafkaTemplate.send(topic, aggregateId, payload) via OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.payment.refund.initiated",
+      "key": "paymentId",
+      "payloadType": "RefundInitiated event data (raw JSON bytes)",
+      "sendCall": "kafkaTemplate.send(topic, aggregateId, payload) via OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.payment.refunded",
+      "key": "paymentId",
+      "payloadType": "RefundCompleted event data (raw JSON bytes)",
+      "sendCall": "kafkaTemplate.send(topic, aggregateId, payload) via OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "payment-service",
+      "publisherClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "kafkaTemplate": "KafkaTemplate<String, byte[]> (byteArrayKafkaTemplate)",
+      "topic": "samato.payment.expired",
+      "key": "paymentId",
+      "payloadType": "PaymentExpired event data (raw JSON bytes)",
+      "sendCall": "kafkaTemplate.send(topic, aggregateId, payload) via OutboxPublisher.publishPending()"
+    },
+    {
+      "service": "restaurant-service",
+      "publisherClass": "com.samato.restaurantservice.service.Outbox",
+      "kafkaTemplate": "KafkaTemplate<String, SpecificRecord> (default bean from shared-kafka KafkaProducerConfig)",
+      "topic": "samato.restaurant.created",
+      "key": "restaurantId",
+      "payloadType": "RestaurantCreatedEvent (Avro SpecificRecord, encoded via AvroBytes.encode before outbox insert, decoded at publish time)",
+      "sendCall": "kafkaTemplate.send(new ProducerRecord<>(topic, aggregateId.toString(), decoded)).get(5, SECONDS) in Outbox.publishPending()"
+    },
+    {
+      "service": "restaurant-service",
+      "publisherClass": "com.samato.restaurantservice.service.Outbox",
+      "kafkaTemplate": "KafkaTemplate<String, SpecificRecord> (shared-kafka)",
+      "topic": "samato.restaurant.updated",
+      "key": "restaurantId",
+      "payloadType": "RestaurantUpdatedEvent (Avro SpecificRecord)",
+      "sendCall": "kafkaTemplate.send(new ProducerRecord<>(topic, aggregateId.toString(), decoded)).get(5, SECONDS) in Outbox.publishPending()"
+    }
+  ],
+  "outboxTables": [
+    {
+      "service": "order-service",
+      "table": "outbox_events",
+      "migration": "services/order-service/src/main/resources/db/migration/V1__init.sql (line 81)",
+      "entity": "com.samato.orderservice.domain.OutboxEvent",
+      "repository": "com.samato.orderservice.domain.OutboxEventRepository (findUnsent: WHERE sent_at IS NULL ORDER BY created_at ASC LIMIT 100)",
+      "columns": {
+        "id": "UUID PK",
+        "aggregate_type": "VARCHAR(100) NOT NULL ('Order')",
+        "aggregate_id": "UUID NOT NULL (order id)",
+        "topic": "VARCHAR(100) NOT NULL",
+        "event_type": "VARCHAR(200) NOT NULL",
+        "payload": "BYTEA NOT NULL (pre-serialized Avro UTF-8 bytes)",
+        "sent_at": "TIMESTAMP NULL (NULL = unsent)",
+        "created_at": "TIMESTAMP NOT NULL"
+      },
+      "index": "idx_outbox_unsent on outbox_events(sent_at)",
+      "pollerClass": "com.samato.orderservice.outbox.OutboxPublisher",
+      "pollIntervalCron": "@Scheduled(fixedDelayString = \"${samato.outbox.poll-ms:500}\") — 500ms default, configurable via samato.outbox.poll-ms"
+    },
+    {
+      "service": "payment-service",
+      "table": "outbox_events",
+      "migration": "services/payment-service/src/main/resources/db/migration/V2__processed_commands_and_views.sql (line 66)",
+      "entity": "com.samato.paymentservice.outbox.OutboxEvent",
+      "repository": "com.samato.paymentservice.outbox.OutboxEventRepository (findUnsent(Pageable) — page size 50)",
+      "columns": {
+        "id": "UUID PK",
+        "aggregate_type": "VARCHAR(100) NOT NULL ('Payment')",
+        "aggregate_id": "UUID NOT NULL (payment id)",
+        "topic": "VARCHAR(100) NOT NULL",
+        "event_type": "VARCHAR(200) NOT NULL",
+        "payload": "BYTEA NOT NULL (event JSON as bytes)",
+        "sent_at": "TIMESTAMPTZ NULL (NULL = unsent)",
+        "created_at": "TIMESTAMPTZ NOT NULL DEFAULT now()"
+      },
+      "index": "idx_outbox_unsent (partial: WHERE sent_at IS NULL)",
+      "pollerClass": "com.samato.paymentservice.outbox.OutboxPublisher",
+      "pollIntervalCron": "@Scheduled(fixedDelayString = \"${samato.outbox.poll-ms:500}\") — 500ms default, batch size 50, sync send with 5s timeout"
+    },
+    {
+      "service": "restaurant-service",
+      "table": "outbox_events",
+      "migration": "services/restaurant-service/src/main/resources/db/migration/V1__init.sql (line 38)",
+      "entity": "com.samato.restaurantservice.domain.OutboxEvent",
+      "repository": "com.samato.restaurantservice.domain.OutboxEventRepository (findUnsent: LIMIT 100)",
+      "columns": {
+        "id": "UUID PK",
+        "aggregate_type": "VARCHAR(100) NOT NULL ('Restaurant')",
+        "aggregate_id": "UUID NOT NULL (restaurant id)",
+        "topic": "VARCHAR(100) NOT NULL",
+        "event_type": "VARCHAR(200) NOT NULL (e.g. com.samato.events.RestaurantCreatedEvent)",
+        "payload": "BYTEA NOT NULL (Avro DataFile bytes via AvroBytes.encode)",
+        "sent_at": "TIMESTAMP NULL (NULL = unsent)",
+        "created_at": "TIMESTAMP NOT NULL"
+      },
+      "index": "idx_outbox_unsent (partial: WHERE sent_at IS NULL, on created_at)",
+      "pollerClass": "com.samato.restaurantservice.service.Outbox",
+      "pollIntervalCron": "@Scheduled(fixedDelay = 1000L) — fixed 1 second, sync send with 5s timeout"
+    }
+  ],
+  "resilience4j": [
+    {
+      "service": "order-service",
+      "scope": "applied via application.yml only; no @CircuitBreaker / @Retry annotations on Feign methods",
+      "config": "samato.resilience4j.restaurant-client (circuit-breaker + retry) at services/order-service/src/main/resources/application.yml",
+      "circuitBreaker": {
+        "name": "restaurant-client",
+        "failure-rate-threshold": 50,
+        "wait-duration-in-open-state": "10s",
+        "sliding-window-size": 10,
+        "minimum-number-of-calls": 5
+      },
+      "retry": {
+        "name": "restaurant-client",
+        "max-attempts": 3,
+        "wait-duration": "200ms"
+      },
+      "note": "RestaurantClient.java javadoc states the breaker is applied at the call site (SagaEngine) rather than the interface. No Java-level annotations found in the source tree."
+    },
+    {
+      "service": "payment-service",
+      "scope": "applied via application.yml only; no @CircuitBreaker / @Retry annotations on RazorpayClient methods",
+      "config": "samato.resilience4j.razorpay-client at services/payment-service/src/main/resources/application.yml",
+      "circuitBreaker": {
+        "name": "razorpay-client",
+        "failure-rate-threshold": 50,
+        "wait-duration-in-open-state": "10s",
+        "sliding-window-size": 10,
+        "minimum-number-of-calls": 5
+      },
+      "retry": {
+        "name": "razorpay-client",
+        "max-attempts": 3,
+        "wait-duration": "200ms"
+      },
+      "note": "RazorpayClient interface javadoc explicitly says annotations are NOT on the interface (avoids JDK-proxy conflicts with two impls); RazorpayClientFallback is kept as reference but not wired as a bean."
+    },
+    {
+      "service": "user-service",
+      "scope": "configured at user-service/src/main/resources/application.yml; annotations planned (Phase 7) but not yet present in source",
+      "config": "resilience4j.circuitbreaker.instances.authService, retry.instances.authService, timelimiter.instances.authService",
+      "circuitBreaker": {
+        "name": "authService",
+        "sliding-window-size": 10,
+        "failure-rate-threshold": 50,
+        "wait-duration-in-open-state": "10s",
+        "permitted-number-of-calls-in-half-open-state": 3
+      },
+      "retry": {
+        "name": "authService",
+        "max-attempts": 3,
+        "wait-duration": "500ms",
+        "exponential-backoff": true,
+        "exponential-backoff-multiplier": 2
+      },
+      "timeLimiter": {
+        "name": "authService",
+        "timeout-duration": "3s"
+      },
+      "note": "AuthClient.java javadoc lists @CircuitBreaker / @Retry as the planned wiring. AuthClientFallback (DomainException AUTH_UNREACHABLE 503) is the only artifact today."
+    },
+    {
+      "service": "restaurant-service",
+      "scope": "dependency present (resilience4j-spring-boot3 in pom) but no policy block in application.yml was found in this scan; no @CircuitBreaker / @Retry annotations in source",
+      "config": "(no resilience4j config block found under services/restaurant-service/src/main/resources/application.yml in this scan)",
+      "note": "Library is on the classpath; policies appear not yet wired."
+    },
+    {
+      "service": "api-gateway",
+      "scope": "Resilience4j gateway filter referenced in INTERVIEW-NOTES.md (Phase 7); no source wiring found in this scan",
+      "note": "Mentioned in services/api-gateway/docs/INTERVIEW-NOTES.md as a planned Phase 7 addition."
+    }
+  ],
+  "restClients": [
+    {
+      "service": "order-service",
+      "bean": "(none — uses OpenFeign, not RestTemplate/WebClient)",
+      "notes": "All cross-service HTTP is via @FeignClient (PaymentClient, RestaurantClient). No RestTemplate or WebClient beans defined in this service."
+    },
+    {
+      "service": "payment-service",
+      "bean": "(none — uses OpenFeign; Razorpay is invoked via the razorpay-java SDK wrapped in com.samato.paymentservice.api.RazorpayClientImpl)",
+      "notes": "No RestTemplate or WebClient beans. RazorpayClient is a hand-written boundary, not a generated HTTP client."
+    },
+    {
+      "service": "restaurant-service",
+      "bean": "(none)",
+      "notes": "No RestTemplate or WebClient beans. Service is reached only via order-service's Feign client."
+    },
+    {
+      "service": "user-service",
+      "bean": "(none — uses OpenFeign via AuthClient)",
+      "notes": "AuthClient.java explicitly comments that Feign was chosen over RestTemplate/WebClient for typed signatures and Resilience4j integration."
+    },
+    {
+      "service": "search-service",
+      "bean": "(none)",
+      "notes": "Cross-service data flow is via Kafka only; no RestTemplate/WebClient beans."
+    },
+    {
+      "service": "auth-service",
+      "bean": "(none)",
+      "notes": "auth-service is a Spring Authorization Server + REST controllers; no outbound RestTemplate/WebClient."
+    },
+    {
+      "service": "api-gateway",
+      "bean": "(none — uses Spring Cloud Gateway routes, not RestTemplate/WebClient)",
+      "notes": "Outbound traffic is handled by GatewayRoutesConfig routing to downstream services by service name."
+    }
+  ],
+  "kafkaTopicCrossReference": {
+    "sharedKafkaAvroSchemas": [
+      {
+        "file": "shared-kafka/src/main/avro/OrderPlacedEvent.avsc",
+        "recordName": "OrderPlacedEvent",
+        "expectedTopic": "samato.order.placed",
+        "publishedBy": "order-service (OutboxPublisher.appendOrderPlaced)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/OrderConfirmedEvent.avsc",
+        "recordName": "OrderConfirmedEvent",
+        "expectedTopic": "samato.order.confirmed",
+        "publishedBy": "order-service (OutboxPublisher.appendOrderConfirmed)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/OrderCancelledEvent.avsc",
+        "recordName": "OrderCancelledEvent",
+        "expectedTopic": "samato.order.cancelled",
+        "publishedBy": "order-service (OutboxPublisher.appendOrderCancelled)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/PaymentChargedEvent.avsc",
+        "recordName": "PaymentChargedEvent",
+        "expectedTopic": "samato.payment.charged",
+        "publishedBy": "payment-service (OutboxPublisher, event-type PaymentCaptured -> topicFor switch)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/PaymentFailedEvent.avsc",
+        "recordName": "PaymentFailedEvent",
+        "expectedTopic": "samato.payment.failed",
+        "publishedBy": "payment-service (OutboxPublisher, PaymentFailed)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/PaymentRefundedEvent.avsc",
+        "recordName": "PaymentRefundedEvent",
+        "expectedTopic": "samato.payment.refunded",
+        "publishedBy": "payment-service (OutboxPublisher, RefundCompleted)",
+        "consumedBy": "(no @KafkaListener found in this scan)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/RestaurantCreatedEvent.avsc",
+        "recordName": "RestaurantCreatedEvent",
+        "expectedTopic": "samato.restaurant.created",
+        "publishedBy": "restaurant-service (Outbox.enqueueRestaurantCreated)",
+        "consumedBy": "search-service (RestaurantEventListener.onEvent)"
+      },
+      {
+        "file": "shared-kafka/src/main/avro/RestaurantUpdatedEvent.avsc",
+        "recordName": "RestaurantUpdatedEvent",
+        "expectedTopic": "samato.restaurant.updated",
+        "publishedBy": "restaurant-service (Outbox.enqueueRestaurantUpdated)",
+        "consumedBy": "search-service (RestaurantEventListener.onEvent)"
+      }
+    ],
+    "topicsDeclaredInCodeButNotInSharedSchemas": [
+      {
+        "topic": "samato.payment.created",
+        "publishedBy": "payment-service (RazorpayOrderCreated -> topicFor switch)",
+        "schema": "(none — uses raw JSON bytes from event store; no .avsc file in shared-kafka for this topic)"
+      },
+      {
+        "topic": "samato.payment.refund.initiated",
+        "publishedBy": "payment-service (RefundInitiated -> topicFor switch)",
+        "schema": "(none — raw JSON bytes)"
+      },
+      {
+        "topic": "samato.payment.expired",
+        "publishedBy": "payment-service (PaymentExpired -> topicFor switch)",
+        "schema": "(none — raw JSON bytes)"
+      }
+    ],
+    "sharedKafkaConfig": {
+      "module": "shared-kafka",
+      "producerBean": "com.samato.sharedkafka.config.KafkaProducerConfig#kafkaTemplate (KafkaTemplate<String, SpecificRecord>, AvroSerializer + SchemaRegistry + KafkaMdcProducerInterceptor)",
+      "consumerBean": "com.samato.sharedkafka.config.KafkaConsumerConfig#kafkaListenerContainerFactory (ConcurrentKafkaListenerContainerFactory<String, SpecificRecord>, KafkaAvroDeserializer, manual ack, auto-offset-reset=earliest, max-poll=50, session-timeout=30s)"
+    }
+  }
+}

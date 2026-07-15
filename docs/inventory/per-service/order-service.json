@@ -1,0 +1,581 @@
+{
+  "service": "order-service",
+  "modulePath": "services/order-service",
+  "files": [
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/OrderServiceApplication.java",
+      "package": "com.samato.orderservice",
+      "className": "OrderServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient", "@EnableFeignClients", "@EnableScheduling", "@ComponentScan(basePackages = {\"com.samato.orderservice\",\"com.samato.shared\",\"com.samato.sharedkafka\"})"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/FeignAuthForwarder.java",
+      "package": "com.samato.orderservice.api",
+      "className": "FeignAuthForwarder",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "set", "signature": "public static void set(String token)", "annotations": [] },
+        { "name": "clear", "signature": "public static void clear()", "annotations": [] },
+        { "name": "current", "signature": "public static String current()", "annotations": [] },
+        { "name": "bearerTokenInterceptor", "signature": "public RequestInterceptor bearerTokenInterceptor()", "annotations": ["@Bean"] },
+        { "name": "correlationIdInterceptor", "signature": "public FeignCorrelationIdInterceptor correlationIdInterceptor()", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "ServiceTokenProvider", "name": "serviceTokenProvider", "fieldOrParam": "field: serviceTokenProvider" }
+      ],
+      "uses": ["ServiceTokenProvider", "FeignCorrelationIdInterceptor"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/OrderDtos.java",
+      "package": "com.samato.orderservice.api",
+      "className": "OrderDtos",
+      "kind": "Dto",
+      "annotations": ["public final"],
+      "publicMethods": [
+        { "name": "OrderItemRequest", "signature": "public record OrderItemRequest(UUID menuItemId, int quantity)", "annotations": [] },
+        { "name": "PlaceOrderRequest", "signature": "public record PlaceOrderRequest(UUID restaurantId, List<OrderItemRequest> items, String notes)", "annotations": [] },
+        { "name": "OrderItemResponse", "signature": "public record OrderItemResponse(UUID id, UUID menuItemId, String name, int quantity, BigDecimal unitPrice)", "annotations": [] },
+        { "name": "OrderResponse", "signature": "public record OrderResponse(UUID id, UUID customerId, UUID restaurantId, OrderStatus status, BigDecimal totalAmount, String currency, String cancellationReason, List<OrderItemResponse> items, UUID sagaId, Instant createdAt, Instant updatedAt)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["OrderStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/PaymentClient.java",
+      "package": "com.samato.orderservice.api",
+      "className": "PaymentClient",
+      "kind": "Interface",
+      "annotations": ["@FeignClient(name = \"samato-payment-service\", fallbackFactory = PaymentClientFallback.class)"],
+      "publicMethods": [
+        { "name": "createOrder", "signature": "PaymentDtos.PaymentResponse createOrder(@RequestHeader(\"Idempotency-Key\") String idempotencyKey, @RequestBody PaymentDtos.CreatePaymentRequest request)", "annotations": ["@PostMapping(\"/api/payments/orders\")"] },
+        { "name": "refund", "signature": "PaymentDtos.PaymentResponse refund(@PathVariable(\"id\") UUID paymentId, @RequestHeader(\"Idempotency-Key\") String idempotencyKey, @RequestBody PaymentDtos.RefundRequest request)", "annotations": ["@PostMapping(\"/api/payments/{id}/refunds\")"] },
+        { "name": "get", "signature": "PaymentDtos.PaymentResponse get(@PathVariable(\"id\") UUID paymentId)", "annotations": ["@GetMapping(\"/api/payments/{id}\")"] }
+      ],
+      "injects": [],
+      "uses": ["PaymentDtos", "PaymentClientFallback"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/PaymentClientFallback.java",
+      "package": "com.samato.orderservice.api",
+      "className": "PaymentClientFallback",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "create", "signature": "public PaymentClient create(Throwable cause)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["PaymentClient", "PaymentDtos", "PaymentUnavailableException"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/PaymentDtos.java",
+      "package": "com.samato.orderservice.api",
+      "className": "PaymentDtos",
+      "kind": "Dto",
+      "annotations": ["public final"],
+      "publicMethods": [
+        { "name": "CreatePaymentRequest", "signature": "public record CreatePaymentRequest(UUID orderId, UUID customerId, BigDecimal amount, String currency)", "annotations": [] },
+        { "name": "RefundRequest", "signature": "public record RefundRequest(BigDecimal amount)", "annotations": [] },
+        { "name": "PaymentResponse", "signature": "public record PaymentResponse(UUID paymentId, String razorpayOrderId, String razorpayPaymentId, UUID orderId, UUID customerId, BigDecimal amount, String currency, String status, long lastEventSeq, OffsetDateTime updatedAt)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantClient.java",
+      "package": "com.samato.orderservice.api",
+      "className": "RestaurantClient",
+      "kind": "Interface",
+      "annotations": ["@FeignClient(name = \"samato-restaurant-service\", fallbackFactory = RestaurantClientFallback.class)"],
+      "publicMethods": [
+        { "name": "getRestaurant", "signature": "RestaurantDtos.RestaurantSummary getRestaurant(@PathVariable(\"id\") UUID id)", "annotations": ["@GetMapping(\"/api/restaurants/{id}\")"] },
+        { "name": "getMenu", "signature": "RestaurantDtos.MenuResponse getMenu(@PathVariable(\"id\") UUID id, @RequestParam(\"ids\") String menuItemIds)", "annotations": ["@GetMapping(\"/api/restaurants/{id}/menu\")"] }
+      ],
+      "injects": [],
+      "uses": ["RestaurantDtos", "RestaurantClientFallback"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantClientFallback.java",
+      "package": "com.samato.orderservice.api",
+      "className": "RestaurantClientFallback",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "create", "signature": "public RestaurantClient create(Throwable cause)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["RestaurantClient", "RestaurantDtos", "RestaurantUnavailableException"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantDtos.java",
+      "package": "com.samato.orderservice.api",
+      "className": "RestaurantDtos",
+      "kind": "Dto",
+      "annotations": ["public final"],
+      "publicMethods": [
+        { "name": "RestaurantSummary", "signature": "public record RestaurantSummary(UUID id, String name, boolean active, String ownerId)", "annotations": [] },
+        { "name": "MenuItem", "signature": "public record MenuItem(UUID id, String name, BigDecimal price, boolean available, int stock)", "annotations": [] },
+        { "name": "MenuResponse", "signature": "public record MenuResponse(List<MenuItem> items)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/RestaurantUnavailableException.java",
+      "package": "com.samato.orderservice.api",
+      "className": "RestaurantUnavailableException",
+      "kind": "Exception",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "RestaurantUnavailableException", "signature": "public RestaurantUnavailableException(String message, Throwable cause)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["DomainException"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/api/ServiceTokenProvider.java",
+      "package": "com.samato.orderservice.api",
+      "className": "ServiceTokenProvider",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "fetchAtStartup", "signature": "public void fetchAtStartup()", "annotations": ["@EventListener(ApplicationReadyEvent.class)"] },
+        { "name": "getServiceToken", "signature": "public String getServiceToken()", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "String (authBaseUrl via @Value)", "name": "authBaseUrl", "fieldOrParam": "field: authBaseUrl" },
+        { "type": "String (serviceEmail via @Value)", "name": "serviceEmail", "fieldOrParam": "field: serviceEmail" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/config/KafkaByteArrayConfig.java",
+      "package": "com.samato.orderservice.config",
+      "className": "KafkaByteArrayConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "byteArrayProducerFactory", "signature": "public ProducerFactory<String, byte[]> byteArrayProducerFactory()", "annotations": ["@Bean"] },
+        { "name": "byteArrayKafkaTemplate", "signature": "public KafkaTemplate<String, byte[]> byteArrayKafkaTemplate(ProducerFactory<String, byte[]> byteArrayProducerFactory)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "String (bootstrapServers via @Value)", "name": "bootstrapServers", "fieldOrParam": "field: bootstrapServers" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/IdempotencyRecord.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "IdempotencyRecord",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"idempotency_records\", indexes = { @Index(name = \"idx_idem_key\", columnList = \"idempotency_key\", unique = true) })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getIdempotencyKey", "signature": "public String getIdempotencyKey()", "annotations": [] },
+        { "name": "setIdempotencyKey", "signature": "public void setIdempotencyKey(String idempotencyKey)", "annotations": [] },
+        { "name": "getCustomerId", "signature": "public UUID getCustomerId()", "annotations": [] },
+        { "name": "setCustomerId", "signature": "public void setCustomerId(UUID customerId)", "annotations": [] },
+        { "name": "getRequestHash", "signature": "public String getRequestHash()", "annotations": [] },
+        { "name": "setRequestHash", "signature": "public void setRequestHash(String requestHash)", "annotations": [] },
+        { "name": "getResponseStatus", "signature": "public int getResponseStatus()", "annotations": [] },
+        { "name": "setResponseStatus", "signature": "public void setResponseStatus(int responseStatus)", "annotations": [] },
+        { "name": "getResponseBody", "signature": "public String getResponseBody()", "annotations": [] },
+        { "name": "setResponseBody", "signature": "public void setResponseBody(String responseBody)", "annotations": [] },
+        { "name": "getOrderId", "signature": "public UUID getOrderId()", "annotations": [] },
+        { "name": "setOrderId", "signature": "public void setOrderId(UUID orderId)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/IdempotencyRepository.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "IdempotencyRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByCustomerIdAndIdempotencyKey", "signature": "Optional<IdempotencyRecord> findByCustomerIdAndIdempotencyKey(UUID customerId, String key)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["IdempotencyRecord"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/Order.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "Order",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"orders\", indexes = { @Index(name = \"idx_orders_customer\", columnList = \"customer_id\"), @Index(name = \"idx_orders_restaurant\", columnList = \"restaurant_id\"), @Index(name = \"idx_orders_status\", columnList = \"status\") })"],
+      "publicMethods": [
+        { "name": "transitionTo", "signature": "public void transitionTo(OrderStatus next)", "annotations": [] },
+        { "name": "addItem", "signature": "public void addItem(OrderItem item)", "annotations": [] },
+        { "name": "recomputeTotal", "signature": "public void recomputeTotal()", "annotations": [] },
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getCustomerId", "signature": "public UUID getCustomerId()", "annotations": [] },
+        { "name": "setCustomerId", "signature": "public void setCustomerId(UUID customerId)", "annotations": [] },
+        { "name": "getRestaurantId", "signature": "public UUID getRestaurantId()", "annotations": [] },
+        { "name": "setRestaurantId", "signature": "public void setRestaurantId(UUID restaurantId)", "annotations": [] },
+        { "name": "getStatus", "signature": "public OrderStatus getStatus()", "annotations": [] },
+        { "name": "setStatus", "signature": "public void setStatus(OrderStatus status)", "annotations": [] },
+        { "name": "getTotalAmount", "signature": "public BigDecimal getTotalAmount()", "annotations": [] },
+        { "name": "setTotalAmount", "signature": "public void setTotalAmount(BigDecimal totalAmount)", "annotations": [] },
+        { "name": "getCurrency", "signature": "public String getCurrency()", "annotations": [] },
+        { "name": "setCurrency", "signature": "public void setCurrency(String currency)", "annotations": [] },
+        { "name": "getCancellationReason", "signature": "public String getCancellationReason()", "annotations": [] },
+        { "name": "setCancellationReason", "signature": "public void setCancellationReason(String cancellationReason)", "annotations": [] },
+        { "name": "getItems", "signature": "public List<OrderItem> getItems()", "annotations": [] },
+        { "name": "setItems", "signature": "public void setItems(List<OrderItem> items)", "annotations": [] },
+        { "name": "getSagaId", "signature": "public UUID getSagaId()", "annotations": [] },
+        { "name": "setSagaId", "signature": "public void setSagaId(UUID sagaId)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] },
+        { "name": "getVersion", "signature": "public long getVersion()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["OrderItem", "OrderStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/OrderItem.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "OrderItem",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"order_items\")"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getOrder", "signature": "public Order getOrder()", "annotations": [] },
+        { "name": "setOrder", "signature": "public void setOrder(Order order)", "annotations": [] },
+        { "name": "getMenuItemId", "signature": "public UUID getMenuItemId()", "annotations": [] },
+        { "name": "setMenuItemId", "signature": "public void setMenuItemId(UUID menuItemId)", "annotations": [] },
+        { "name": "getName", "signature": "public String getName()", "annotations": [] },
+        { "name": "setName", "signature": "public void setName(String name)", "annotations": [] },
+        { "name": "getQuantity", "signature": "public int getQuantity()", "annotations": [] },
+        { "name": "setQuantity", "signature": "public void setQuantity(int quantity)", "annotations": [] },
+        { "name": "getUnitPrice", "signature": "public BigDecimal getUnitPrice()", "annotations": [] },
+        { "name": "setUnitPrice", "signature": "public void setUnitPrice(BigDecimal unitPrice)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["Order"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/OrderRepository.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "OrderRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByCustomerIdOrderByCreatedAtDesc", "signature": "List<Order> findByCustomerIdOrderByCreatedAtDesc(UUID customerId)", "annotations": [] },
+        { "name": "findByRestaurantIdOrderByCreatedAtDesc", "signature": "List<Order> findByRestaurantIdOrderByCreatedAtDesc(UUID restaurantId)", "annotations": [] },
+        { "name": "findByStatus", "signature": "List<Order> findByStatus(OrderStatus status)", "annotations": [] },
+        { "name": "findBySagaId", "signature": "Optional<Order> findBySagaId(UUID sagaId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["Order", "OrderStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/OrderStatus.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "OrderStatus",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "isTerminal", "signature": "public boolean isTerminal()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/OutboxEvent.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "OutboxEvent",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"outbox_events\", indexes = { @Index(name = \"idx_outbox_unsent\", columnList = \"sent_at\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getAggregateType", "signature": "public String getAggregateType()", "annotations": [] },
+        { "name": "setAggregateType", "signature": "public void setAggregateType(String aggregateType)", "annotations": [] },
+        { "name": "getAggregateId", "signature": "public UUID getAggregateId()", "annotations": [] },
+        { "name": "setAggregateId", "signature": "public void setAggregateId(UUID aggregateId)", "annotations": [] },
+        { "name": "getTopic", "signature": "public String getTopic()", "annotations": [] },
+        { "name": "setTopic", "signature": "public void setTopic(String topic)", "annotations": [] },
+        { "name": "getEventType", "signature": "public String getEventType()", "annotations": [] },
+        { "name": "setEventType", "signature": "public void setEventType(String eventType)", "annotations": [] },
+        { "name": "getPayload", "signature": "public byte[] getPayload()", "annotations": [] },
+        { "name": "setPayload", "signature": "public void setPayload(byte[] payload)", "annotations": [] },
+        { "name": "getSentAt", "signature": "public Instant getSentAt()", "annotations": [] },
+        { "name": "setSentAt", "signature": "public void setSentAt(Instant sentAt)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/OutboxEventRepository.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "OutboxEventRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findUnsent", "signature": "List<OutboxEvent> findUnsent()", "annotations": ["@Query(\"SELECT e FROM OutboxEvent e WHERE e.sentAt IS NULL ORDER BY e.createdAt ASC LIMIT 100\")"] }
+      ],
+      "injects": [],
+      "uses": ["OutboxEvent"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaInstance.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaInstance",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"saga_instances\", indexes = { @Index(name = \"idx_saga_order\", columnList = \"order_id\"), @Index(name = \"idx_saga_status\", columnList = \"status\") })"],
+      "publicMethods": [
+        { "name": "addStep", "signature": "public void addStep(SagaStep step)", "annotations": [] },
+        { "name": "nextPendingStep", "signature": "public SagaStep nextPendingStep()", "annotations": [] },
+        { "name": "lastCompletedStep", "signature": "public SagaStep lastCompletedStep()", "annotations": [] },
+        { "name": "isFinished", "signature": "public boolean isFinished()", "annotations": [] },
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getOrderId", "signature": "public UUID getOrderId()", "annotations": [] },
+        { "name": "setOrderId", "signature": "public void setOrderId(UUID orderId)", "annotations": [] },
+        { "name": "getStatus", "signature": "public SagaStatus getStatus()", "annotations": [] },
+        { "name": "setStatus", "signature": "public void setStatus(SagaStatus status)", "annotations": [] },
+        { "name": "getCurrentStepIndex", "signature": "public int getCurrentStepIndex()", "annotations": [] },
+        { "name": "setCurrentStepIndex", "signature": "public void setCurrentStepIndex(int currentStepIndex)", "annotations": [] },
+        { "name": "getFailureReason", "signature": "public String getFailureReason()", "annotations": [] },
+        { "name": "setFailureReason", "signature": "public void setFailureReason(String failureReason)", "annotations": [] },
+        { "name": "getSteps", "signature": "public List<SagaStep> getSteps()", "annotations": [] },
+        { "name": "setSteps", "signature": "public void setSteps(List<SagaStep> steps)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] },
+        { "name": "getVersion", "signature": "public long getVersion()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["SagaStep", "SagaStatus", "SagaStepStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaRepository.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByOrderId", "signature": "Optional<SagaInstance> findByOrderId(UUID orderId)", "annotations": [] },
+        { "name": "findByStatus", "signature": "List<SagaInstance> findByStatus(SagaStatus status)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["SagaInstance", "SagaStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaStatus.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaStatus",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaStep.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaStep",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"saga_steps\", indexes = { @Index(name = \"idx_step_saga\", columnList = \"saga_id\"), @Index(name = \"idx_step_status\", columnList = \"status\") })"],
+      "publicMethods": [
+        { "name": "markRunning", "signature": "public void markRunning()", "annotations": [] },
+        { "name": "markCompleted", "signature": "public void markCompleted(String payload)", "annotations": [] },
+        { "name": "markFailed", "signature": "public void markFailed(String error)", "annotations": [] },
+        { "name": "markCompensating", "signature": "public void markCompensating()", "annotations": [] },
+        { "name": "markCompensated", "signature": "public void markCompensated()", "annotations": [] },
+        { "name": "markFailedCompensation", "signature": "public void markFailedCompensation(String error)", "annotations": [] },
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getSaga", "signature": "public SagaInstance getSaga()", "annotations": [] },
+        { "name": "setSaga", "signature": "public void setSaga(SagaInstance saga)", "annotations": [] },
+        { "name": "getStepIndex", "signature": "public int getStepIndex()", "annotations": [] },
+        { "name": "setStepIndex", "signature": "public void setStepIndex(int stepIndex)", "annotations": [] },
+        { "name": "getStepType", "signature": "public SagaStepType getStepType()", "annotations": [] },
+        { "name": "setStepType", "signature": "public void setStepType(SagaStepType stepType)", "annotations": [] },
+        { "name": "getStatus", "signature": "public SagaStepStatus getStatus()", "annotations": [] },
+        { "name": "setStatus", "signature": "public void setStatus(SagaStepStatus status)", "annotations": [] },
+        { "name": "getPayload", "signature": "public String getPayload()", "annotations": [] },
+        { "name": "setPayload", "signature": "public void setPayload(String payload)", "annotations": [] },
+        { "name": "getErrorMessage", "signature": "public String getErrorMessage()", "annotations": [] },
+        { "name": "setErrorMessage", "signature": "public void setErrorMessage(String errorMessage)", "annotations": [] },
+        { "name": "getStartedAt", "signature": "public Instant getStartedAt()", "annotations": [] },
+        { "name": "getCompletedAt", "signature": "public Instant getCompletedAt()", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["SagaInstance", "SagaStepType", "SagaStepStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaStepStatus.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaStepStatus",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/domain/SagaStepType.java",
+      "package": "com.samato.orderservice.domain",
+      "className": "SagaStepType",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/outbox/OutboxPublisher.java",
+      "package": "com.samato.orderservice.outbox",
+      "className": "OutboxPublisher",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "appendOrderPlaced", "signature": "public void appendOrderPlaced(Order order)", "annotations": [] },
+        { "name": "appendOrderConfirmed", "signature": "public void appendOrderConfirmed(Order order)", "annotations": [] },
+        { "name": "appendOrderCancelled", "signature": "public void appendOrderCancelled(Order order)", "annotations": [] },
+        { "name": "publishPending", "signature": "public void publishPending()", "annotations": ["@Scheduled(fixedDelayString = \"${samato.outbox.poll-ms:500}\")", "@Transactional"] }
+      ],
+      "injects": [
+        { "type": "OutboxEventRepository", "name": "repo", "fieldOrParam": "field: repo" },
+        { "type": "KafkaTemplate<String, byte[]>", "name": "kafka", "fieldOrParam": "field: kafka" },
+        { "type": "ObjectMapper", "name": "objectMapper", "fieldOrParam": "field: objectMapper" }
+      ],
+      "uses": ["Order", "OutboxEvent", "OrderPlacedEvent", "OrderConfirmedEvent", "OrderCancelledEvent"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/saga/SagaEngine.java",
+      "package": "com.samato.orderservice.saga",
+      "className": "SagaEngine",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "start", "signature": "public SagaInstance start(UUID orderId)", "annotations": ["@Transactional"] },
+        { "name": "drive", "signature": "public void drive(UUID sagaId)", "annotations": ["@Transactional"] },
+        { "name": "runStep", "signature": "public void runStep(SagaInstance saga, SagaStep step)", "annotations": ["@Transactional(propagation = Propagation.REQUIRES_NEW)"] },
+        { "name": "compensate", "signature": "public void compensate(SagaInstance saga)", "annotations": ["@Transactional"] },
+        { "name": "compensateStep", "signature": "public void compensateStep(SagaInstance saga, SagaStep step)", "annotations": ["@Transactional(propagation = Propagation.REQUIRES_NEW)"] },
+        { "name": "findByOrderId", "signature": "public Optional<SagaInstance> findByOrderId(UUID orderId)", "annotations": [] },
+        { "name": "findInProgress", "signature": "public List<SagaInstance> findInProgress()", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "SagaRepository", "name": "sagaRepository", "fieldOrParam": "field: sagaRepository" },
+        { "type": "OrderRepository", "name": "orderRepository", "fieldOrParam": "field: orderRepository" },
+        { "type": "RestaurantClient", "name": "restaurantClient", "fieldOrParam": "field: restaurantClient" },
+        { "type": "PaymentClient", "name": "paymentClient", "fieldOrParam": "field: paymentClient" },
+        { "type": "StepHandlers", "name": "stepHandlers", "fieldOrParam": "field: stepHandlers" },
+        { "type": "OutboxPublisher", "name": "outbox", "fieldOrParam": "field: outbox" },
+        { "type": "ObjectMapper", "name": "objectMapper", "fieldOrParam": "field: objectMapper" },
+        { "type": "SagaEngine (self via @Lazy)", "name": "self", "fieldOrParam": "field: self" }
+      ],
+      "uses": ["Order", "OrderItem", "SagaInstance", "SagaStep", "SagaStatus", "SagaStepStatus", "SagaStepType", "RestaurantDtos", "PaymentDtos", "OutboxPublisher", "OrderStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/saga/SagaPoller.java",
+      "package": "com.samato.orderservice.saga",
+      "className": "SagaPoller",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "resumeInProgress", "signature": "public void resumeInProgress()", "annotations": ["@Scheduled(fixedDelayString = \"${samato.saga.poll-ms:1000}\")"] }
+      ],
+      "injects": [
+        { "type": "SagaEngine", "name": "sagaEngine", "fieldOrParam": "field: sagaEngine" }
+      ],
+      "uses": ["SagaEngine", "SagaInstance"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/saga/StepHandlers.java",
+      "package": "com.samato.orderservice.saga",
+      "className": "StepHandlers",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "isCompleted", "signature": "public boolean isCompleted(SagaStep step)", "annotations": [] },
+        { "name": "isFailed", "signature": "public boolean isFailed(SagaStep step)", "annotations": [] },
+        { "name": "describe", "signature": "public String describe(SagaInstance saga)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["SagaStep", "SagaInstance", "SagaStepStatus"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/security/SecurityConfig.java",
+      "package": "com.samato.orderservice.security",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "filterChain", "signature": "public SecurityFilterChain filterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] },
+        { "name": "jwtAuthConverter", "signature": "public Converter<Jwt, AbstractAuthenticationToken> jwtAuthConverter()", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "HttpSecurity", "name": "http", "fieldOrParam": "filterChain(HttpSecurity http)" },
+        { "type": "String (jwkSetUri via @Value)", "name": "jwkSetUri", "fieldOrParam": "jwtDecoder(String jwkSetUri)" }
+      ],
+      "uses": ["FeignAuthForwarder"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/service/OrderService.java",
+      "package": "com.samato.orderservice.service",
+      "className": "OrderService",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "placeOrder", "signature": "public PlaceOrderResult placeOrder(UUID customerId, String idempotencyKey, OrderDtos.PlaceOrderRequest request)", "annotations": [] },
+        { "name": "persistAndStartSaga", "signature": "public UUID persistAndStartSaga(UUID customerId, String idempotencyKey, OrderDtos.PlaceOrderRequest request)", "annotations": ["@Transactional"] },
+        { "name": "get", "signature": "public Order get(UUID id)", "annotations": [] },
+        { "name": "byCustomer", "signature": "public List<Order> byCustomer(UUID customerId)", "annotations": [] },
+        { "name": "byRestaurant", "signature": "public List<Order> byRestaurant(UUID restaurantId)", "annotations": [] },
+        { "name": "sagaFor", "signature": "public Optional<SagaInstance> sagaFor(UUID orderId)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "OrderRepository", "name": "orderRepository", "fieldOrParam": "field: orderRepository" },
+        { "type": "IdempotencyRepository", "name": "idempotencyRepository", "fieldOrParam": "field: idempotencyRepository" },
+        { "type": "OutboxPublisher", "name": "outbox", "fieldOrParam": "field: outbox" },
+        { "type": "SagaEngine", "name": "sagaEngine", "fieldOrParam": "field: sagaEngine" },
+        { "type": "ObjectMapper", "name": "objectMapper", "fieldOrParam": "field: objectMapper" }
+      ],
+      "uses": ["Order", "OrderItem", "OrderStatus", "IdempotencyRecord", "OutboxPublisher", "SagaEngine", "DomainException", "OrderDtos"]
+    },
+    {
+      "path": "services/order-service/src/main/java/com/samato/orderservice/web/OrderController.java",
+      "package": "com.samato.orderservice.web",
+      "className": "OrderController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/orders\")"],
+      "publicMethods": [
+        { "name": "place", "signature": "public ResponseEntity<OrderResponse> place(@AuthenticationPrincipal Jwt jwt, @RequestHeader(value = \"Idempotency-Key\", required = false) String idempotencyKey, @Valid @RequestBody OrderDtos.PlaceOrderRequest request)", "annotations": ["@PostMapping", "@PreAuthorize(\"hasRole('CUSTOMER')\")"] },
+        { "name": "get", "signature": "public OrderResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id)", "annotations": ["@GetMapping(\"/{id}\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN')\")"] },
+        { "name": "list", "signature": "public List<OrderResponse> list(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping", "@PreAuthorize(\"hasRole('CUSTOMER')\")"] },
+        { "name": "saga", "signature": "public Map<String, Object> saga(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id)", "annotations": ["@GetMapping(\"/{id}/saga\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN')\")"] }
+      ],
+      "injects": [
+        { "type": "OrderService", "name": "orderService", "fieldOrParam": "field: orderService" }
+      ],
+      "uses": ["OrderService", "OrderDtos", "Order", "OrderItem", "SagaInstance", "DomainException"]
+    }
+  ],
+  "migrations": [
+    { "file": "V1__init.sql", "tablesCreated": ["orders", "order_items", "saga_instances", "saga_steps", "idempotency_records", "outbox_events"], "tablesAltered": [] },
+    { "file": "V2__relax_order_items_not_null.sql", "tablesCreated": [], "tablesAltered": ["order_items"] }
+  ],
+  "endpoints": [
+    { "controllerClass": "OrderController", "method": "POST", "path": "/api/orders", "handlerMethod": "place", "requestDto": "PlaceOrderRequest", "responseDto": "OrderResponse", "guards": ["hasRole('CUSTOMER')"] },
+    { "controllerClass": "OrderController", "method": "GET", "path": "/api/orders/{id}", "handlerMethod": "get", "requestDto": null, "responseDto": "OrderResponse", "guards": ["hasAnyRole('CUSTOMER','ADMIN')", "owner-or-admin check at runtime"] },
+    { "controllerClass": "OrderController", "method": "GET", "path": "/api/orders", "handlerMethod": "list", "requestDto": null, "responseDto": "List<OrderResponse>", "guards": ["hasRole('CUSTOMER')"] },
+    { "controllerClass": "OrderController", "method": "GET", "path": "/api/orders/{id}/saga", "handlerMethod": "saga", "requestDto": null, "responseDto": "Map<String,Object>", "guards": ["hasAnyRole('CUSTOMER','ADMIN')", "owner-or-admin check at runtime"] }
+  ],
+  "javaFileCount": 33
+}

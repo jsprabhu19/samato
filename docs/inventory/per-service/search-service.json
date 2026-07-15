@@ -1,0 +1,110 @@
+{
+  "service": "search-service",
+  "modulePath": "services/search-service",
+  "files": [
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/SearchServiceApplication.java",
+      "package": "com.samato.searchservice",
+      "className": "SearchServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient", "@EnableKafka", "@ComponentScan(basePackages = {\"com.samato.searchservice\",\"com.samato.shared\",\"com.samato.sharedkafka\"})"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/config/OpenSearchConfig.java",
+      "package": "com.samato.searchservice.config",
+      "className": "OpenSearchConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "openSearchClient", "signature": "public RestHighLevelClient openSearchClient()", "annotations": ["@Bean(destroyMethod = \"close\")"] }
+      ],
+      "injects": [
+        { "type": "String (host via @Value)", "name": "host", "fieldOrParam": "field: host" },
+        { "type": "int (port via @Value)", "name": "port", "fieldOrParam": "field: port" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/config/OpenSearchIndexInitializer.java",
+      "package": "com.samato.searchservice.config",
+      "className": "OpenSearchIndexInitializer",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "ensureIndex", "signature": "public void ensureIndex()", "annotations": ["@EventListener(ApplicationReadyEvent.class)"] }
+      ],
+      "injects": [
+        { "type": "RestHighLevelClient", "name": "client", "fieldOrParam": "field: client" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/config/SecurityConfig.java",
+      "package": "com.samato.searchservice.config",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "filterChain", "signature": "public SecurityFilterChain filterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "HttpSecurity", "name": "http", "fieldOrParam": "filterChain(HttpSecurity http)" },
+        { "type": "String (jwkSetUri via @Value)", "name": "jwkSetUri", "fieldOrParam": "jwtDecoder(String jwkSetUri)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/projection/RestaurantEventListener.java",
+      "package": "com.samato.searchservice.projection",
+      "className": "RestaurantEventListener",
+      "kind": "Listener",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "onEvent", "signature": "public void onEvent(ConsumerRecord<String, SpecificRecord> record, Acknowledgment ack)", "annotations": ["@KafkaListener(topics = {\"samato.restaurant.created\",\"samato.restaurant.updated\"}, groupId = \"samato-search-service\")"] }
+      ],
+      "injects": [
+        { "type": "RestaurantProjector", "name": "projector", "fieldOrParam": "field: projector" }
+      ],
+      "uses": ["RestaurantProjector", "MdcContext"]
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/projection/RestaurantProjector.java",
+      "package": "com.samato.searchservice.projection",
+      "className": "RestaurantProjector",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "apply", "signature": "public void apply(SpecificRecord ev)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "RestHighLevelClient", "name": "osClient", "fieldOrParam": "field: osClient" }
+      ],
+      "uses": ["RestaurantCreatedEvent", "RestaurantUpdatedEvent"]
+    },
+    {
+      "path": "services/search-service/src/main/java/com/samato/searchservice/web/SearchController.java",
+      "package": "com.samato.searchservice.web",
+      "className": "SearchController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/search\")"],
+      "publicMethods": [
+        { "name": "search", "signature": "public SearchResponse search(@RequestParam(required=false) String q, @RequestParam(required=false) String cuisine, @RequestParam(required=false) String city, @RequestParam(required=false) Double lat, @RequestParam(required=false) Double lon, @RequestParam(required=false) Double radiusKm, @RequestParam(defaultValue=\"20\") int size) throws Exception", "annotations": ["@GetMapping(\"/restaurants\")", "@PreAuthorize(\"isAuthenticated()\")"] }
+      ],
+      "injects": [
+        { "type": "RestHighLevelClient", "name": "osClient", "fieldOrParam": "field: osClient" }
+      ],
+      "uses": ["RestaurantProjector", "SearchResponse"]
+    }
+  ],
+  "migrations": [],
+  "endpoints": [
+    { "controllerClass": "SearchController", "method": "GET", "path": "/api/search/restaurants", "handlerMethod": "search", "requestDto": null, "responseDto": "SearchResponse (record)", "guards": ["isAuthenticated()"] }
+  ],
+  "javaFileCount": 7
+}

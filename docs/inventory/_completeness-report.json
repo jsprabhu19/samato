@@ -1,0 +1,104 @@
+{
+  "javaFileCounts": {
+    "api-gateway": { "actual": 8, "reported": 8, "ok": true },
+    "auth-service": { "actual": 16, "reported": 16, "ok": true },
+    "config-service": { "actual": 1, "reported": 1, "ok": true },
+    "discovery-service": { "actual": 1, "reported": 1, "ok": true },
+    "order-service": { "actual": 33, "reported": 33, "ok": true },
+    "payment-service": { "actual": 37, "reported": 37, "ok": true },
+    "restaurant-service": { "actual": 14, "reported": 14, "ok": true },
+    "search-service": { "actual": 7, "reported": 7, "ok": true },
+    "user-service": { "actual": 15, "reported": 15, "ok": true }
+  },
+  "endpointCounts": {
+    "api-gateway": { "actual": 0, "reported": 0, "ok": true, "note": "Service has 0 @Controller methods; all 7 endpoints in inventory are gateway routes (not counted here)." },
+    "auth-service": { "actual": 5, "reported": 5, "ok": true },
+    "config-service": { "actual": 0, "reported": 0, "ok": true },
+    "discovery-service": { "actual": 0, "reported": 0, "ok": true },
+    "order-service": { "actual": 4, "reported": 4, "ok": true },
+    "payment-service": { "actual": 7, "reported": 7, "ok": true },
+    "restaurant-service": { "actual": 7, "reported": 7, "ok": true },
+    "search-service": { "actual": 1, "reported": 1, "ok": true },
+    "user-service": { "actual": 9, "reported": 9, "ok": true }
+  },
+  "topicCoverage": [
+    {
+      "topic": "samato.restaurant.created",
+      "producedBy": ["restaurant-service (Outbox.enqueueRestaurantCreated -> Outbox.publishPending via KafkaTemplate<String,SpecificRecord>)"],
+      "consumedBy": ["search-service (RestaurantEventListener.onEvent via @KafkaListener)"],
+      "schema": "shared-kafka/src/main/avro/RestaurantCreatedEvent.avsc"
+    },
+    {
+      "topic": "samato.restaurant.updated",
+      "producedBy": ["restaurant-service (Outbox.enqueueRestaurantUpdated -> Outbox.publishPending via KafkaTemplate<String,SpecificRecord>)"],
+      "consumedBy": ["search-service (RestaurantEventListener.onEvent via @KafkaListener)"],
+      "schema": "shared-kafka/src/main/avro/RestaurantUpdatedEvent.avsc"
+    },
+    {
+      "topic": "samato.order.placed",
+      "producedBy": ["order-service (OutboxPublisher.appendOrderPlaced -> publishPending via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/OrderPlacedEvent.avsc"
+    },
+    {
+      "topic": "samato.order.confirmed",
+      "producedBy": ["order-service (OutboxPublisher.appendOrderConfirmed -> publishPending via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/OrderConfirmedEvent.avsc"
+    },
+    {
+      "topic": "samato.order.cancelled",
+      "producedBy": ["order-service (OutboxPublisher.appendOrderCancelled -> publishPending via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/OrderCancelledEvent.avsc"
+    },
+    {
+      "topic": "samato.payment.charged",
+      "producedBy": ["payment-service (OutboxPublisher, PaymentCaptured -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/PaymentChargedEvent.avsc"
+    },
+    {
+      "topic": "samato.payment.failed",
+      "producedBy": ["payment-service (OutboxPublisher, PaymentFailed -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/PaymentFailedEvent.avsc"
+    },
+    {
+      "topic": "samato.payment.refunded",
+      "producedBy": ["payment-service (OutboxPublisher, RefundCompleted -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": "shared-kafka/src/main/avro/PaymentRefundedEvent.avsc"
+    },
+    {
+      "topic": "samato.payment.created",
+      "producedBy": ["payment-service (OutboxPublisher, RazorpayOrderCreated -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": null
+    },
+    {
+      "topic": "samato.payment.refund.initiated",
+      "producedBy": ["payment-service (OutboxPublisher, RefundInitiated -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": null
+    },
+    {
+      "topic": "samato.payment.expired",
+      "producedBy": ["payment-service (OutboxPublisher, PaymentExpired -> topicFor switch via KafkaTemplate<String,byte[]>)"],
+      "consumedBy": [],
+      "schema": null
+    }
+  ],
+  "missingConsumers": [
+    "samato.order.placed (Phase 6 work — no @KafkaListener in any service)",
+    "samato.order.confirmed (Phase 6 work — no @KafkaListener in any service)",
+    "samato.order.cancelled (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.charged (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.failed (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.refunded (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.created (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.refund.initiated (Phase 6 work — no @KafkaListener in any service)",
+    "samato.payment.expired (Phase 6 work — no @KafkaListener in any service)"
+  ],
+  "ok": true
+}

@@ -1,0 +1,114 @@
+{
+  "service": "api-gateway",
+  "modulePath": "services/api-gateway",
+  "files": [
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/ApiGatewayApplication.java",
+      "package": "com.samato.apigateway",
+      "className": "ApiGatewayApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/config/CorrelationIdWebFilter.java",
+      "package": "com.samato.apigateway.config",
+      "className": "CorrelationIdWebFilter",
+      "kind": "Filter",
+      "annotations": ["@Component", "@Order(Ordered.HIGHEST_PRECEDENCE)"],
+      "publicMethods": [
+        { "name": "filter", "signature": "public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["CorrelationIdFilter", "MdcKeys"]
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/config/CorsConfig.java",
+      "package": "com.samato.apigateway.config",
+      "className": "CorsConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "corsWebFilter", "signature": "public CorsWebFilter corsWebFilter()", "annotations": ["@Bean"] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/config/GatewayRoutesConfig.java",
+      "package": "com.samato.apigateway.config",
+      "className": "GatewayRoutesConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "routes", "signature": "public RouteLocator routes(RouteLocatorBuilder builder)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "RouteLocatorBuilder", "name": "builder", "fieldOrParam": "routes(RouteLocatorBuilder builder)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/config/JwtConfig.java",
+      "package": "com.samato.apigateway.config",
+      "className": "JwtConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "jwtDecoder", "signature": "public ReactiveJwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "String (jwkSetUri via @Value)", "name": "jwkSetUri", "fieldOrParam": "jwtDecoder(String jwkSetUri)" }
+      ],
+      "uses": ["ReactiveJwtDecoder", "NimbusReactiveJwtDecoder"]
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/security/JwtAuthFilter.java",
+      "package": "com.samato.apigateway.security",
+      "className": "JwtAuthFilter",
+      "kind": "Filter",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "filter", "signature": "public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain)", "annotations": ["@Override"] },
+        { "name": "getOrder", "signature": "public int getOrder()", "annotations": ["@Override"] }
+      ],
+      "injects": [
+        { "type": "ReactiveJwtDecoder", "name": "jwtDecoder", "fieldOrParam": "field: jwtDecoder" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/security/RateLimitConfig.java",
+      "package": "com.samato.apigateway.security",
+      "className": "RateLimitConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "userOrIpKeyResolver", "signature": "public KeyResolver userOrIpKeyResolver()", "annotations": ["@Bean"] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/api-gateway/src/main/java/com/samato/apigateway/security/SecurityConfig.java",
+      "package": "com.samato.apigateway.security",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration", "@EnableWebFluxSecurity"],
+      "publicMethods": [
+        { "name": "springSecurityFilterChain", "signature": "public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "ServerHttpSecurity", "name": "http", "fieldOrParam": "springSecurityFilterChain(ServerHttpSecurity http)" }
+      ],
+      "uses": []
+    }
+  ],
+  "migrations": [],
+  "endpoints": [],
+  "javaFileCount": 8
+}

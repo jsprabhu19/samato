@@ -1,0 +1,252 @@
+{
+  "service": "auth-service",
+  "modulePath": "services/auth-service",
+  "files": [
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/AuthServiceApplication.java",
+      "package": "com.samato.authservice",
+      "className": "AuthServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/config/DevDataSeeder.java",
+      "package": "com.samato.authservice.config",
+      "className": "DevDataSeeder",
+      "kind": "Component",
+      "annotations": ["@Component", "@Profile({\"dev\", \"default\"})"],
+      "publicMethods": [
+        { "name": "run", "signature": "public void run(String... args)", "annotations": ["@Override"] }
+      ],
+      "injects": [
+        { "type": "UserRepository", "name": "users", "fieldOrParam": "field: users" },
+        { "type": "OAuthClientRepository", "name": "clients", "fieldOrParam": "field: clients" },
+        { "type": "PasswordEncoder", "name": "encoder", "fieldOrParam": "field: encoder" }
+      ],
+      "uses": ["UserAccount", "OAuthClient", "Role"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/domain/OAuthClient.java",
+      "package": "com.samato.authservice.domain",
+      "className": "OAuthClient",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"oauth_clients\", indexes = { @Index(name = \"idx_oauth_clients_client_id\", columnList = \"client_id\", unique = true) })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getClientId", "signature": "public String getClientId()", "annotations": [] },
+        { "name": "setClientId", "signature": "public void setClientId(String clientId)", "annotations": [] },
+        { "name": "getClientSecretHash", "signature": "public String getClientSecretHash()", "annotations": [] },
+        { "name": "setClientSecretHash", "signature": "public void setClientSecretHash(String clientSecretHash)", "annotations": [] },
+        { "name": "getRedirectUri", "signature": "public String getRedirectUri()", "annotations": [] },
+        { "name": "setRedirectUri", "signature": "public void setRedirectUri(String redirectUri)", "annotations": [] },
+        { "name": "isEnabled", "signature": "public boolean isEnabled()", "annotations": [] },
+        { "name": "setEnabled", "signature": "public void setEnabled(boolean enabled)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/domain/OAuthClientRepository.java",
+      "package": "com.samato.authservice.domain",
+      "className": "OAuthClientRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByClientId", "signature": "Optional<OAuthClient> findByClientId(String clientId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["OAuthClient"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/domain/Role.java",
+      "package": "com.samato.authservice.domain",
+      "className": "Role",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/domain/UserAccount.java",
+      "package": "com.samato.authservice.domain",
+      "className": "UserAccount",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"users\", indexes = { @Index(name = \"idx_users_email\", columnList = \"email\", unique = true) })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getEmail", "signature": "public String getEmail()", "annotations": [] },
+        { "name": "setEmail", "signature": "public void setEmail(String email)", "annotations": [] },
+        { "name": "getPasswordHash", "signature": "public String getPasswordHash()", "annotations": [] },
+        { "name": "setPasswordHash", "signature": "public void setPasswordHash(String passwordHash)", "annotations": [] },
+        { "name": "getRoles", "signature": "public Set<Role> getRoles()", "annotations": [] },
+        { "name": "setRoles", "signature": "public void setRoles(Set<Role> roles)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["Role"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/domain/UserRepository.java",
+      "package": "com.samato.authservice.domain",
+      "className": "UserRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByEmail", "signature": "Optional<UserAccount> findByEmail(String email)", "annotations": [] },
+        { "name": "existsByEmail", "signature": "boolean existsByEmail(String email)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["UserAccount"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/security/AuthServerConfig.java",
+      "package": "com.samato.authservice.security",
+      "className": "AuthServerConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "authServerFilterChain", "signature": "public SecurityFilterChain authServerFilterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean", "@Order(1)"] },
+        { "name": "defaultSecurityFilterChain", "signature": "public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean", "@Order(2)"] },
+        { "name": "passwordEncoder", "signature": "public PasswordEncoder passwordEncoder()", "annotations": ["@Bean"] },
+        { "name": "jwkSource", "signature": "public JWKSource<SecurityContext> jwkSource()", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource)", "annotations": ["@Bean"] },
+        { "name": "authorizationServerSettings", "signature": "public AuthorizationServerSettings authorizationServerSettings()", "annotations": ["@Bean"] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/security/JpaRegisteredClientRepository.java",
+      "package": "com.samato.authservice.security",
+      "className": "JpaRegisteredClientRepository",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "save", "signature": "public void save(RegisteredClient registeredClient)", "annotations": ["@Override"] },
+        { "name": "findById", "signature": "public RegisteredClient findById(String id)", "annotations": ["@Override"] },
+        { "name": "findByClientId", "signature": "public RegisteredClient findByClientId(String clientId)", "annotations": ["@Override"] }
+      ],
+      "injects": [
+        { "type": "OAuthClientRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["OAuthClient"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/security/JpaUserDetailsService.java",
+      "package": "com.samato.authservice.security",
+      "className": "JpaUserDetailsService",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "loadUserByUsername", "signature": "public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException", "annotations": ["@Override"] }
+      ],
+      "injects": [
+        { "type": "UserRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["UserAccount"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/security/JwtRolesCustomizer.java",
+      "package": "com.samato.authservice.security",
+      "className": "JwtRolesCustomizer",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "customize", "signature": "public void customize(JwtEncodingContext context)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["UserAccount"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/web/DevTokenController.java",
+      "package": "com.samato.authservice.web",
+      "className": "DevTokenController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/auth\")", "@Profile({\"dev\", \"default\"})"],
+      "publicMethods": [
+        { "name": "devToken", "signature": "public ResponseEntity<?> devToken(@RequestParam(\"email\") String email)", "annotations": ["@GetMapping(\"/dev-token\")"] }
+      ],
+      "injects": [
+        { "type": "UserRepository", "name": "users", "fieldOrParam": "field: users" },
+        { "type": "JwtEncoder", "name": "jwtEncoder", "fieldOrParam": "field: jwtEncoder" }
+      ],
+      "uses": ["UserAccount"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/web/JwksController.java",
+      "package": "com.samato.authservice.web",
+      "className": "JwksController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/.well-known\")"],
+      "publicMethods": [
+        { "name": "jwks", "signature": "public String jwks()", "annotations": ["@GetMapping(value = \"/jwks.json\", produces = MediaType.APPLICATION_JSON_VALUE)"] }
+      ],
+      "injects": [
+        { "type": "JWKSource<SecurityContext>", "name": "jwkSource", "fieldOrParam": "field: jwkSource" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/web/MeController.java",
+      "package": "com.samato.authservice.web",
+      "className": "MeController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/auth\")"],
+      "publicMethods": [
+        { "name": "me", "signature": "public MeResponse me(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping(\"/me\")"] }
+      ],
+      "injects": [
+        { "type": "UserRepository", "name": "users", "fieldOrParam": "field: users" }
+      ],
+      "uses": ["UserAccount", "Role"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/web/RegistrationController.java",
+      "package": "com.samato.authservice.web",
+      "className": "RegistrationController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/auth\")"],
+      "publicMethods": [
+        { "name": "register", "signature": "public RegisterResponse register(@Valid @RequestBody RegisterRequest req)", "annotations": ["@PostMapping(\"/register\")", "@ResponseStatus(HttpStatus.CREATED)"] }
+      ],
+      "injects": [
+        { "type": "UserRepository", "name": "users", "fieldOrParam": "field: users" },
+        { "type": "PasswordEncoder", "name": "encoder", "fieldOrParam": "field: encoder" }
+      ],
+      "uses": ["UserAccount", "Role", "DomainException"]
+    },
+    {
+      "path": "services/auth-service/src/main/java/com/samato/authservice/web/TokenDebugController.java",
+      "package": "com.samato.authservice.web",
+      "className": "TokenDebugController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/auth\")"],
+      "publicMethods": [
+        { "name": "debug", "signature": "public Object debug(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping(\"/debug/token\")"] }
+      ],
+      "injects": [],
+      "uses": []
+    }
+  ],
+  "migrations": [
+    { "file": "V1__init.sql", "tablesCreated": ["users", "user_roles", "oauth_clients"], "tablesAltered": [] }
+  ],
+  "endpoints": [
+    { "controllerClass": "RegistrationController", "method": "POST", "path": "/api/auth/register", "handlerMethod": "register", "requestDto": "RegisterRequest", "responseDto": "RegisterResponse", "guards": [] },
+    { "controllerClass": "MeController", "method": "GET", "path": "/api/auth/me", "handlerMethod": "me", "requestDto": null, "responseDto": "MeResponse", "guards": ["authenticated()"] },
+    { "controllerClass": "JwksController", "method": "GET", "path": "/.well-known/jwks.json", "handlerMethod": "jwks", "requestDto": null, "responseDto": "String (JWKSet JSON)", "guards": [] },
+    { "controllerClass": "DevTokenController", "method": "GET", "path": "/api/auth/dev-token", "handlerMethod": "devToken", "requestDto": null, "responseDto": "Map<String,Object>", "guards": [] },
+    { "controllerClass": "TokenDebugController", "method": "GET", "path": "/api/auth/debug/token", "handlerMethod": "debug", "requestDto": null, "responseDto": "DebugView (record)", "guards": ["authenticated()"] }
+  ],
+  "javaFileCount": 16
+}

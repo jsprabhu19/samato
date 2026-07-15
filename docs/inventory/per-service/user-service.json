@@ -1,0 +1,251 @@
+{
+  "service": "user-service",
+  "modulePath": "services/user-service",
+  "files": [
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/UserServiceApplication.java",
+      "package": "com.samato.userservice",
+      "className": "UserServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient", "@EnableFeignClients"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/client/AuthClient.java",
+      "package": "com.samato.userservice.client",
+      "className": "AuthClient",
+      "kind": "Interface",
+      "annotations": ["@FeignClient(name = \"samato-auth-service\", fallback = AuthClientFallback.class)"],
+      "publicMethods": [
+        { "name": "me", "signature": "AuthMeResponse me(@RequestHeader(\"Authorization\") String bearer)", "annotations": ["@GetMapping(\"/api/auth/me\")"] }
+      ],
+      "injects": [],
+      "uses": ["AuthClientFallback", "AuthMeResponse", "DomainException"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/client/AuthClientFallback.java",
+      "package": "com.samato.userservice.client",
+      "className": "AuthClientFallback",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "me", "signature": "public AuthMeResponse me(String bearer)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["DomainException"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/config/FeignConfig.java",
+      "package": "com.samato.userservice.config",
+      "className": "FeignConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "correlationIdInterceptor", "signature": "public FeignCorrelationIdInterceptor correlationIdInterceptor()", "annotations": ["@Bean"] }
+      ],
+      "injects": [],
+      "uses": ["FeignCorrelationIdInterceptor"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/CustomerProfile.java",
+      "package": "com.samato.userservice.domain",
+      "className": "CustomerProfile",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"customer_profiles\")"],
+      "publicMethods": [
+        { "name": "getUserId", "signature": "public UUID getUserId()", "annotations": [] },
+        { "name": "setUserId", "signature": "public void setUserId(UUID userId)", "annotations": [] },
+        { "name": "getDisplayName", "signature": "public String getDisplayName()", "annotations": [] },
+        { "name": "setDisplayName", "signature": "public void setDisplayName(String displayName)", "annotations": [] },
+        { "name": "getPhone", "signature": "public String getPhone()", "annotations": [] },
+        { "name": "setPhone", "signature": "public void setPhone(String phone)", "annotations": [] },
+        { "name": "getPhotoUrl", "signature": "public String getPhotoUrl()", "annotations": [] },
+        { "name": "setPhotoUrl", "signature": "public void setPhotoUrl(String photoUrl)", "annotations": [] },
+        { "name": "getPreferencesJson", "signature": "public String getPreferencesJson()", "annotations": [] },
+        { "name": "setPreferencesJson", "signature": "public void setPreferencesJson(String preferencesJson)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/CustomerProfileRepository.java",
+      "package": "com.samato.userservice.domain",
+      "className": "CustomerProfileRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByUserId", "signature": "Optional<CustomerProfile> findByUserId(UUID userId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["CustomerProfile"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/DriverProfile.java",
+      "package": "com.samato.userservice.domain",
+      "className": "DriverProfile",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"driver_profiles\")"],
+      "publicMethods": [
+        { "name": "getUserId", "signature": "public UUID getUserId()", "annotations": [] },
+        { "name": "setUserId", "signature": "public void setUserId(UUID userId)", "annotations": [] },
+        { "name": "getFullName", "signature": "public String getFullName()", "annotations": [] },
+        { "name": "setFullName", "signature": "public void setFullName(String fullName)", "annotations": [] },
+        { "name": "getVehicleType", "signature": "public String getVehicleType()", "annotations": [] },
+        { "name": "setVehicleType", "signature": "public void setVehicleType(String vehicleType)", "annotations": [] },
+        { "name": "getLicensePlate", "signature": "public String getLicensePlate()", "annotations": [] },
+        { "name": "setLicensePlate", "signature": "public void setLicensePlate(String licensePlate)", "annotations": [] },
+        { "name": "isOnDuty", "signature": "public boolean isOnDuty()", "annotations": [] },
+        { "name": "setOnDuty", "signature": "public void setOnDuty(boolean onDuty)", "annotations": [] },
+        { "name": "getCurrentLatitude", "signature": "public Double getCurrentLatitude()", "annotations": [] },
+        { "name": "setCurrentLatitude", "signature": "public void setCurrentLatitude(Double currentLatitude)", "annotations": [] },
+        { "name": "getCurrentLongitude", "signature": "public Double getCurrentLongitude()", "annotations": [] },
+        { "name": "setCurrentLongitude", "signature": "public void setCurrentLongitude(Double currentLongitude)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/DriverProfileRepository.java",
+      "package": "com.samato.userservice.domain",
+      "className": "DriverProfileRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByOnDutyTrue", "signature": "List<DriverProfile> findByOnDutyTrue()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["DriverProfile"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/RestaurantOwnerProfile.java",
+      "package": "com.samato.userservice.domain",
+      "className": "RestaurantOwnerProfile",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"restaurant_owner_profiles\")"],
+      "publicMethods": [
+        { "name": "getUserId", "signature": "public UUID getUserId()", "annotations": [] },
+        { "name": "setUserId", "signature": "public void setUserId(UUID userId)", "annotations": [] },
+        { "name": "getBusinessName", "signature": "public String getBusinessName()", "annotations": [] },
+        { "name": "setBusinessName", "signature": "public void setBusinessName(String businessName)", "annotations": [] },
+        { "name": "getContactEmail", "signature": "public String getContactEmail()", "annotations": [] },
+        { "name": "setContactEmail", "signature": "public void setContactEmail(String contactEmail)", "annotations": [] },
+        { "name": "getContactPhone", "signature": "public String getContactPhone()", "annotations": [] },
+        { "name": "setContactPhone", "signature": "public void setContactPhone(String contactPhone)", "annotations": [] },
+        { "name": "getTaxId", "signature": "public String getTaxId()", "annotations": [] },
+        { "name": "setTaxId", "signature": "public void setTaxId(String taxId)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/RestaurantOwnerProfileRepository.java",
+      "package": "com.samato.userservice.domain",
+      "className": "RestaurantOwnerProfileRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": ["RestaurantOwnerProfile"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/domain/Role.java",
+      "package": "com.samato.userservice.domain",
+      "className": "Role",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/security/SecurityConfig.java",
+      "package": "com.samato.userservice.security",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration", "@EnableMethodSecurity"],
+      "publicMethods": [
+        { "name": "filterChain", "signature": "public SecurityFilterChain filterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] },
+        { "name": "jwtAuthenticationConverter", "signature": "public JwtAuthenticationConverter jwtAuthenticationConverter()", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "HttpSecurity", "name": "http", "fieldOrParam": "filterChain(HttpSecurity http)" },
+        { "type": "String (jwkSetUri via @Value)", "name": "jwkSetUri", "fieldOrParam": "jwtDecoder(String jwkSetUri)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/web/CustomerProfileController.java",
+      "package": "com.samato.userservice.web",
+      "className": "CustomerProfileController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/users\")"],
+      "publicMethods": [
+        { "name": "getMine", "signature": "public CustomerProfile getMine(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping(\"/me\")", "@PreAuthorize(\"isAuthenticated()\")"] },
+        { "name": "updateMine", "signature": "public CustomerProfile updateMine(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateProfileRequest req)", "annotations": ["@PutMapping(\"/me\")", "@PreAuthorize(\"isAuthenticated()\")"] },
+        { "name": "getById", "signature": "public CustomerProfile getById(@PathVariable UUID id)", "annotations": ["@GetMapping(\"/{id}\")", "@PreAuthorize(\"hasRole('ADMIN') or authentication.name == #id.toString()\")"] }
+      ],
+      "injects": [
+        { "type": "CustomerProfileRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["CustomerProfile", "DomainException"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/web/DriverProfileController.java",
+      "package": "com.samato.userservice.web",
+      "className": "DriverProfileController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/users/drivers\")"],
+      "publicMethods": [
+        { "name": "getMine", "signature": "public DriverProfile getMine(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping(\"/me\")", "@PreAuthorize(\"hasRole('DRIVER')\")"] },
+        { "name": "updateMine", "signature": "public DriverProfile updateMine(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateRequest req)", "annotations": ["@PutMapping(\"/me\")", "@PreAuthorize(\"hasRole('DRIVER')\")"] },
+        { "name": "updateLocation", "signature": "public DriverProfile updateLocation(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody LocationUpdate req)", "annotations": ["@PutMapping(\"/me/location\")", "@PreAuthorize(\"hasRole('DRIVER')\")"] },
+        { "name": "listOnDuty", "signature": "public List<DriverProfile> listOnDuty()", "annotations": ["@GetMapping(\"/on-duty\")", "@PreAuthorize(\"hasRole('DRIVER') or hasRole('ADMIN')\")"] }
+      ],
+      "injects": [
+        { "type": "DriverProfileRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["DriverProfile"]
+    },
+    {
+      "path": "services/user-service/src/main/java/com/samato/userservice/web/RestaurantOwnerProfileController.java",
+      "package": "com.samato.userservice.web",
+      "className": "RestaurantOwnerProfileController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/users/restaurant-owners\")"],
+      "publicMethods": [
+        { "name": "getMine", "signature": "public RestaurantOwnerProfile getMine(@AuthenticationPrincipal Jwt jwt)", "annotations": ["@GetMapping(\"/me\")", "@PreAuthorize(\"hasRole('RESTAURANT_OWNER')\")"] },
+        { "name": "updateMine", "signature": "public RestaurantOwnerProfile updateMine(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateRequest req)", "annotations": ["@PutMapping(\"/me\")", "@PreAuthorize(\"hasRole('RESTAURANT_OWNER')\")"] }
+      ],
+      "injects": [
+        { "type": "RestaurantOwnerProfileRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["RestaurantOwnerProfile"]
+    }
+  ],
+  "migrations": [
+    { "file": "V1__init.sql", "tablesCreated": ["customer_profiles", "driver_profiles", "restaurant_owner_profiles"], "tablesAltered": [] }
+  ],
+  "endpoints": [
+    { "controllerClass": "CustomerProfileController", "method": "GET", "path": "/api/users/me", "handlerMethod": "getMine", "requestDto": null, "responseDto": "CustomerProfile", "guards": ["isAuthenticated()"] },
+    { "controllerClass": "CustomerProfileController", "method": "PUT", "path": "/api/users/me", "handlerMethod": "updateMine", "requestDto": "UpdateProfileRequest", "responseDto": "CustomerProfile", "guards": ["isAuthenticated()"] },
+    { "controllerClass": "CustomerProfileController", "method": "GET", "path": "/api/users/{id}", "handlerMethod": "getById", "requestDto": null, "responseDto": "CustomerProfile", "guards": ["hasRole('ADMIN') or authentication.name == #id.toString()"] },
+    { "controllerClass": "DriverProfileController", "method": "GET", "path": "/api/users/drivers/me", "handlerMethod": "getMine", "requestDto": null, "responseDto": "DriverProfile", "guards": ["hasRole('DRIVER')"] },
+    { "controllerClass": "DriverProfileController", "method": "PUT", "path": "/api/users/drivers/me", "handlerMethod": "updateMine", "requestDto": "UpdateRequest", "responseDto": "DriverProfile", "guards": ["hasRole('DRIVER')"] },
+    { "controllerClass": "DriverProfileController", "method": "PUT", "path": "/api/users/drivers/me/location", "handlerMethod": "updateLocation", "requestDto": "LocationUpdate", "responseDto": "DriverProfile", "guards": ["hasRole('DRIVER')"] },
+    { "controllerClass": "DriverProfileController", "method": "GET", "path": "/api/users/drivers/on-duty", "handlerMethod": "listOnDuty", "requestDto": null, "responseDto": "List<DriverProfile>", "guards": ["hasRole('DRIVER') or hasRole('ADMIN')"] },
+    { "controllerClass": "RestaurantOwnerProfileController", "method": "GET", "path": "/api/users/restaurant-owners/me", "handlerMethod": "getMine", "requestDto": null, "responseDto": "RestaurantOwnerProfile", "guards": ["hasRole('RESTAURANT_OWNER')"] },
+    { "controllerClass": "RestaurantOwnerProfileController", "method": "PUT", "path": "/api/users/restaurant-owners/me", "handlerMethod": "updateMine", "requestDto": "UpdateRequest", "responseDto": "RestaurantOwnerProfile", "guards": ["hasRole('RESTAURANT_OWNER')"] }
+  ],
+  "javaFileCount": 15
+}

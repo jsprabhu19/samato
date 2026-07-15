@@ -1,0 +1,609 @@
+{
+  "service": "payment-service",
+  "modulePath": "services/payment-service",
+  "files": [
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/PaymentServiceApplication.java",
+      "package": "com.samato.paymentservice",
+      "className": "PaymentServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient", "@EnableFeignClients", "@EnableScheduling", "@ComponentScan(basePackages = {\"com.samato.paymentservice\",\"com.samato.shared\",\"com.samato.sharedkafka\"})"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/api/PaymentDtos.java",
+      "package": "com.samato.paymentservice.api",
+      "className": "PaymentDtos",
+      "kind": "Dto",
+      "annotations": ["public final"],
+      "publicMethods": [
+        { "name": "CreatePaymentRequest", "signature": "public record CreatePaymentRequest(UUID orderId, UUID customerId, BigDecimal amount, String currency)", "annotations": [] },
+        { "name": "RefundRequest", "signature": "public record RefundRequest(BigDecimal amount)", "annotations": [] },
+        { "name": "PaymentResponse", "signature": "public record PaymentResponse(UUID paymentId, String razorpayOrderId, String razorpayPaymentId, UUID orderId, UUID customerId, BigDecimal amount, String currency, String status, long lastEventSeq, OffsetDateTime updatedAt)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/api/RazorpayClient.java",
+      "package": "com.samato.paymentservice.api",
+      "className": "RazorpayClient",
+      "kind": "Interface",
+      "annotations": ["@FeignClient(name = \"razorpay-mock\", url = \"${razorpay.base-url:http://localhost:9999}\", fallbackFactory = RazorpayClientFallback.class)"],
+      "publicMethods": [
+        { "name": "createOrder", "signature": "Map<String, Object> createOrder(@RequestBody Map<String, Object> req)", "annotations": ["@PostMapping(\"/v1/orders\")"] },
+        { "name": "capture", "signature": "Map<String, Object> capture(@PathVariable(\"paymentId\") String paymentId, @RequestBody Map<String, Object> body)", "annotations": ["@PostMapping(\"/v1/payments/{paymentId}/capture\")"] },
+        { "name": "refund", "signature": "Map<String, Object> refund(@PathVariable(\"paymentId\") String paymentId, @RequestBody Map<String, Object> body)", "annotations": ["@PostMapping(\"/v1/payments/{paymentId}/refund\")"] }
+      ],
+      "injects": [],
+      "uses": ["RazorpayClientFallback"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/api/RazorpayClientFallback.java",
+      "package": "com.samato.paymentservice.api",
+      "className": "RazorpayClientFallback",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "create", "signature": "public RazorpayClient create(Throwable cause)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["RazorpayClient"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/api/RazorpayClientImpl.java",
+      "package": "com.samato.paymentservice.api",
+      "className": "RazorpayClientImpl",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "createOrder", "signature": "public Map<String, Object> createOrder(Map<String, Object> req)", "annotations": ["@Override"] },
+        { "name": "capture", "signature": "public Map<String, Object> capture(String paymentId, Map<String, Object> body)", "annotations": ["@Override"] },
+        { "name": "refund", "signature": "public Map<String, Object> refund(String paymentId, Map<String, Object> body)", "annotations": ["@Override"] }
+      ],
+      "injects": [],
+      "uses": ["RazorpayClient"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/api/WebhookSignatureVerifier.java",
+      "package": "com.samato.paymentservice.api",
+      "className": "WebhookSignatureVerifier",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "verify", "signature": "public boolean verify(byte[] payload, String signature)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "String (razorpaySecret via @Value)", "name": "razorpaySecret", "fieldOrParam": "field: razorpaySecret" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/config/KafkaByteArrayConfig.java",
+      "package": "com.samato.paymentservice.config",
+      "className": "KafkaByteArrayConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "byteArrayProducerFactory", "signature": "public ProducerFactory<String, byte[]> byteArrayProducerFactory()", "annotations": ["@Bean"] },
+        { "name": "byteArrayKafkaTemplate", "signature": "public KafkaTemplate<String, byte[]> byteArrayKafkaTemplate(ProducerFactory<String, byte[]> byteArrayProducerFactory)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "String (bootstrapServers via @Value)", "name": "bootstrapServers", "fieldOrParam": "field: bootstrapServers" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentCommand.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentCommand",
+      "kind": "Interface",
+      "annotations": ["public sealed interface"],
+      "publicMethods": [
+        { "name": "type", "signature": "String type()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/Money.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "Money",
+      "kind": "ValueObject",
+      "annotations": ["@Embeddable"],
+      "publicMethods": [
+        { "name": "Money", "signature": "public Money(BigDecimal amount, String currency)", "annotations": [] },
+        { "name": "Money", "signature": "public Money()", "annotations": [] },
+        { "name": "getAmount", "signature": "public BigDecimal getAmount()", "annotations": [] },
+        { "name": "setAmount", "signature": "public void setAmount(BigDecimal amount)", "annotations": [] },
+        { "name": "getCurrency", "signature": "public String getCurrency()", "annotations": [] },
+        { "name": "setCurrency", "signature": "public void setCurrency(String currency)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/Payment.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "Payment",
+      "kind": "Aggregate",
+      "annotations": ["public final class (domain entity, but NOT JPA @Entity)"],
+      "publicMethods": [
+        { "name": "Payment", "signature": "public Payment(UUID paymentId, UUID orderId, UUID customerId, BigDecimal amount, String currency)", "annotations": [] },
+        { "name": "rehydrate", "signature": "public static Payment rehydrate(UUID paymentId, UUID orderId, UUID customerId, BigDecimal totalAmount, String currency, PaymentStatus status, String razorpayOrderId, String razorpayPaymentId, long lastSeq)", "annotations": [] },
+        { "name": "apply", "signature": "public void apply(PaymentEvent event, long seq)", "annotations": [] },
+        { "name": "createRazorpayOrder", "signature": "public String createRazorpayOrder(String razorpayOrderId)", "annotations": [] },
+        { "name": "authorize", "signature": "public void authorize(String razorpayPaymentId, long seq)", "annotations": [] },
+        { "name": "capture", "signature": "public void capture(long seq)", "annotations": [] },
+        { "name": "fail", "signature": "public void fail(String reason, long seq)", "annotations": [] },
+        { "name": "refund", "signature": "public void refund(BigDecimal amount, String reason, long seq)", "annotations": [] },
+        { "name": "refundFailed", "signature": "public void refundFailed(BigDecimal amount, String reason, long seq)", "annotations": [] },
+        { "name": "balanceAt", "signature": "public BigDecimal balanceAt(long seq)", "annotations": [] },
+        { "name": "ensureMutability", "signature": "public void ensureMutability()", "annotations": [] },
+        { "name": "ensureRazorpayPaymentId", "signature": "public void ensureRazorpayPaymentId()", "annotations": [] },
+        { "name": "getPaymentId", "signature": "public UUID getPaymentId()", "annotations": [] },
+        { "name": "getOrderId", "signature": "public UUID getOrderId()", "annotations": [] },
+        { "name": "getCustomerId", "signature": "public UUID getCustomerId()", "annotations": [] },
+        { "name": "getStatus", "signature": "public PaymentStatus getStatus()", "annotations": [] },
+        { "name": "getRazorpayOrderId", "signature": "public String getRazorpayOrderId()", "annotations": [] },
+        { "name": "getRazorpayPaymentId", "signature": "public String getRazorpayPaymentId()", "annotations": [] },
+        { "name": "getTotalAmount", "signature": "public BigDecimal getTotalAmount()", "annotations": [] },
+        { "name": "getCurrency", "signature": "public String getCurrency()", "annotations": [] },
+        { "name": "getLastSeq", "signature": "public long getLastSeq()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["PaymentEvent", "PaymentStatus"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentRepository.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "save", "signature": "void save(Payment payment, long expectedVersion)", "annotations": [] },
+        { "name": "find", "signature": "Payment find(UUID paymentId)", "annotations": [] },
+        { "name": "findByOrderId", "signature": "Payment findByOrderId(UUID orderId)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "EventStore", "name": "store", "fieldOrParam": "field: store" }
+      ],
+      "uses": ["Payment", "EventStore", "PaymentEvent", "OptimisticLockException", "PaymentStatus", "SnapshotRepository"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentStatus.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentStatus",
+      "kind": "Enum",
+      "annotations": [],
+      "publicMethods": [],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentEvent.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentEvent",
+      "kind": "SealedInterface",
+      "annotations": ["public sealed interface"],
+      "publicMethods": [
+        { "name": "type", "signature": "String type()", "annotations": [] },
+        { "name": "paymentId", "signature": "UUID paymentId()", "annotations": [] },
+        { "name": "orderId", "signature": "UUID orderId()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/EventSerde.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "EventSerde",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "serialize", "signature": "public byte[] serialize(PaymentEvent event)", "annotations": [] },
+        { "name": "deserialize", "signature": "public PaymentEvent deserialize(byte[] payload, String type)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "ObjectMapper", "name": "objectMapper", "fieldOrParam": "field: objectMapper" }
+      ],
+      "uses": ["PaymentEvent", "PaymentCreated", "PaymentAuthorized", "PaymentCaptured", "PaymentFailed", "PaymentRefunded", "PaymentRefundFailed", "DomainException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/EventStoreEntry.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "EventStoreEntry",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"events\", indexes = { @Index(name = \"idx_events_aggregate\", columnList = \"aggregate_id, sequence\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getAggregateId", "signature": "public UUID getAggregateId()", "annotations": [] },
+        { "name": "setAggregateId", "signature": "public void setAggregateId(UUID aggregateId)", "annotations": [] },
+        { "name": "getSequence", "signature": "public long getSequence()", "annotations": [] },
+        { "name": "setSequence", "signature": "public void setSequence(long sequence)", "annotations": [] },
+        { "name": "getType", "signature": "public String getType()", "annotations": [] },
+        { "name": "setType", "signature": "public void setType(String type)", "annotations": [] },
+        { "name": "getPayload", "signature": "public byte[] getPayload()", "annotations": [] },
+        { "name": "setPayload", "signature": "public void setPayload(byte[] payload)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/EventStoreEntryRepository.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "EventStoreEntryRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByAggregateIdOrderBySequenceAsc", "signature": "List<EventStoreEntry> findByAggregateIdOrderBySequenceAsc(UUID aggregateId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["EventStoreEntry"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/OptimisticLockException.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "OptimisticLockException",
+      "kind": "Exception",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "OptimisticLockException", "signature": "public OptimisticLockException(String message)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["DomainException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PostgresEventStore.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PostgresEventStore",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "load", "signature": "public List<PaymentEvent> load(UUID aggregateId)", "annotations": [] },
+        { "name": "append", "signature": "public long append(UUID aggregateId, long expectedSeq, PaymentEvent event)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "EventStoreEntryRepository", "name": "entries", "fieldOrParam": "field: entries" },
+        { "type": "EventSerde", "name": "serde", "fieldOrParam": "field: serde" },
+        { "type": "JdbcTemplate", "name": "jdbc", "fieldOrParam": "field: jdbc" }
+      ],
+      "uses": ["EventStoreEntry", "EventSerde", "PaymentEvent", "OptimisticLockException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentSnapshot.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentSnapshot",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"payment_snapshots\")"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getPaymentId", "signature": "public UUID getPaymentId()", "annotations": [] },
+        { "name": "setPaymentId", "signature": "public void setPaymentId(UUID paymentId)", "annotations": [] },
+        { "name": "getState", "signature": "public String getState()", "annotations": [] },
+        { "name": "setState", "signature": "public void setState(String state)", "annotations": [] },
+        { "name": "getLastSeq", "signature": "public long getLastSeq()", "annotations": [] },
+        { "name": "setLastSeq", "signature": "public void setLastSeq(long lastSeq)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/PaymentSnapshotRepository.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "PaymentSnapshotRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findById", "signature": "Optional<PaymentSnapshot> findById(UUID paymentId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["PaymentSnapshot"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/domain/Snapshotter.java",
+      "package": "com.samato.paymentservice.domain",
+      "className": "Snapshotter",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "maybeSnapshot", "signature": "public void maybeSnapshot(Payment payment)", "annotations": [] },
+        { "name": "load", "signature": "public Payment load(UUID paymentId)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "PaymentSnapshotRepository", "name": "snapshots", "fieldOrParam": "field: snapshots" },
+        { "type": "EventStoreEntryRepository", "name": "entries", "fieldOrParam": "field: entries" },
+        { "type": "EventSerde", "name": "serde", "fieldOrParam": "field: serde" },
+        { "type": "int (interval via @Value)", "name": "interval", "fieldOrParam": "field: interval" }
+      ],
+      "uses": ["PaymentSnapshot", "EventStoreEntry", "EventSerde", "PaymentEvent", "Payment", "PaymentStatus"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/idempotency/IdempotencyGuard.java",
+      "package": "com.samato.paymentservice.idempotency",
+      "className": "IdempotencyGuard",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "process", "signature": "public <T> T process(String key, Supplier<T> work)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "ProcessedCommandRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["ProcessedCommand", "ProcessedCommandRepository", "DomainException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/idempotency/ProcessedCommand.java",
+      "package": "com.samato.paymentservice.idempotency",
+      "className": "ProcessedCommand",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"processed_commands\", indexes = { @Index(name = \"idx_proc_key\", columnList = \"command_key\", unique = true) })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getCommandKey", "signature": "public String getCommandKey()", "annotations": [] },
+        { "name": "setCommandKey", "signature": "public void setCommandKey(String commandKey)", "annotations": [] },
+        { "name": "getResult", "signature": "public String getResult()", "annotations": [] },
+        { "name": "setResult", "signature": "public void setResult(String result)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/idempotency/ProcessedCommandRepository.java",
+      "package": "com.samato.paymentservice.idempotency",
+      "className": "ProcessedCommandRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByCommandKey", "signature": "Optional<ProcessedCommand> findByCommandKey(String key)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["ProcessedCommand"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/outbox/OutboxEvent.java",
+      "package": "com.samato.paymentservice.outbox",
+      "className": "OutboxEvent",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"outbox_events\", indexes = { @Index(name = \"idx_outbox_unsent\", columnList = \"sent_at\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getAggregateId", "signature": "public UUID getAggregateId()", "annotations": [] },
+        { "name": "setAggregateId", "signature": "public void setAggregateId(UUID aggregateId)", "annotations": [] },
+        { "name": "getTopic", "signature": "public String getTopic()", "annotations": [] },
+        { "name": "setTopic", "signature": "public void setTopic(String topic)", "annotations": [] },
+        { "name": "getEventType", "signature": "public String getEventType()", "annotations": [] },
+        { "name": "setEventType", "signature": "public void setEventType(String eventType)", "annotations": [] },
+        { "name": "getPayload", "signature": "public byte[] getPayload()", "annotations": [] },
+        { "name": "setPayload", "signature": "public void setPayload(byte[] payload)", "annotations": [] },
+        { "name": "getSentAt", "signature": "public Instant getSentAt()", "annotations": [] },
+        { "name": "setSentAt", "signature": "public void setSentAt(Instant sentAt)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/outbox/OutboxEventRepository.java",
+      "package": "com.samato.paymentservice.outbox",
+      "className": "OutboxEventRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findUnsent", "signature": "List<OutboxEvent> findUnsent()", "annotations": ["@Query(\"SELECT e FROM OutboxEvent e WHERE e.sentAt IS NULL ORDER BY e.createdAt ASC LIMIT 100\")"] }
+      ],
+      "injects": [],
+      "uses": ["OutboxEvent"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/outbox/OutboxPublisher.java",
+      "package": "com.samato.paymentservice.outbox",
+      "className": "OutboxPublisher",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "publishPending", "signature": "public void publishPending()", "annotations": ["@Scheduled(fixedDelayString = \"${samato.outbox.poll-ms:500}\")", "@Transactional"] }
+      ],
+      "injects": [
+        { "type": "OutboxEventRepository", "name": "repo", "fieldOrParam": "field: repo" },
+        { "type": "KafkaTemplate<String, byte[]>", "name": "kafka", "fieldOrParam": "field: kafka" }
+      ],
+      "uses": ["OutboxEvent"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/projector/PaymentProjector.java",
+      "package": "com.samato.paymentservice.projector",
+      "className": "PaymentProjector",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "onEvent", "signature": "public void onEvent(PaymentEvent event)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "PaymentViewRepository", "name": "views", "fieldOrParam": "field: views" }
+      ],
+      "uses": ["PaymentEvent", "PaymentView"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/projector/PaymentView.java",
+      "package": "com.samato.paymentservice.projector",
+      "className": "PaymentView",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"payment_view\", indexes = { @Index(name = \"idx_pv_order\", columnList = \"order_id\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getOrderId", "signature": "public UUID getOrderId()", "annotations": [] },
+        { "name": "setOrderId", "signature": "public void setOrderId(UUID orderId)", "annotations": [] },
+        { "name": "getCustomerId", "signature": "public UUID getCustomerId()", "annotations": [] },
+        { "name": "setCustomerId", "signature": "public void setCustomerId(UUID customerId)", "annotations": [] },
+        { "name": "getAmount", "signature": "public BigDecimal getAmount()", "annotations": [] },
+        { "name": "setAmount", "signature": "public void setAmount(BigDecimal amount)", "annotations": [] },
+        { "name": "getCurrency", "signature": "public String getCurrency()", "annotations": [] },
+        { "name": "setCurrency", "signature": "public void setCurrency(String currency)", "annotations": [] },
+        { "name": "getStatus", "signature": "public String getStatus()", "annotations": [] },
+        { "name": "setStatus", "signature": "public void setStatus(String status)", "annotations": [] },
+        { "name": "getRazorpayOrderId", "signature": "public String getRazorpayOrderId()", "annotations": [] },
+        { "name": "setRazorpayOrderId", "signature": "public void setRazorpayOrderId(String razorpayOrderId)", "annotations": [] },
+        { "name": "getRazorpayPaymentId", "signature": "public String getRazorpayPaymentId()", "annotations": [] },
+        { "name": "setRazorpayPaymentId", "signature": "public void setRazorpayPaymentId(String razorpayPaymentId)", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public OffsetDateTime getUpdatedAt()", "annotations": [] },
+        { "name": "setUpdatedAt", "signature": "public void setUpdatedAt(OffsetDateTime updatedAt)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/projector/PaymentViewRepository.java",
+      "package": "com.samato.paymentservice.projector",
+      "className": "PaymentViewRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByOrderId", "signature": "Optional<PaymentView> findByOrderId(UUID orderId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["PaymentView"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentCommandHandler.java",
+      "package": "com.samato.paymentservice.service",
+      "className": "PaymentCommandHandler",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "createPayment", "signature": "public Payment createPayment(UUID orderId, UUID customerId, BigDecimal amount, String currency)", "annotations": [] },
+        { "name": "refund", "signature": "public Payment refund(UUID paymentId, BigDecimal amount)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "PaymentRepository", "name": "paymentRepository", "fieldOrParam": "field: paymentRepository" },
+        { "type": "RazorpayClient", "name": "razorpay", "fieldOrParam": "field: razorpay" }
+      ],
+      "uses": ["Payment", "PaymentEvent", "PaymentStatus", "DomainException", "PaymentCreated", "PaymentRefunded"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentService.java",
+      "package": "com.samato.paymentservice.service",
+      "className": "PaymentService",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "createOrder", "signature": "public PaymentDtos.PaymentResponse createOrder(PaymentDtos.CreatePaymentRequest request, String idempotencyKey)", "annotations": [] },
+        { "name": "refund", "signature": "public PaymentDtos.PaymentResponse refund(UUID paymentId, PaymentDtos.RefundRequest request, String idempotencyKey)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "PaymentCommandHandler", "name": "commandHandler", "fieldOrParam": "field: commandHandler" },
+        { "type": "IdempotencyGuard", "name": "idempotency", "fieldOrParam": "field: idempotency" },
+        { "type": "PaymentRepository", "name": "paymentRepository", "fieldOrParam": "field: paymentRepository" },
+        { "type": "PaymentViewRepository", "name": "viewRepository", "fieldOrParam": "field: viewRepository" }
+      ],
+      "uses": ["PaymentDtos", "Payment", "PaymentView", "IdempotencyGuard", "DomainException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/service/PaymentQueryService.java",
+      "package": "com.samato.paymentservice.service",
+      "className": "PaymentQueryService",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "getById", "signature": "public PaymentDtos.PaymentResponse getById(UUID id)", "annotations": [] },
+        { "name": "getByOrderId", "signature": "public PaymentDtos.PaymentResponse getByOrderId(UUID orderId)", "annotations": [] },
+        { "name": "listEvents", "signature": "public List<PaymentEvent> listEvents(UUID id)", "annotations": [] },
+        { "name": "balanceAt", "signature": "public BigDecimal balanceAt(UUID id, long version)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "PaymentRepository", "name": "paymentRepository", "fieldOrParam": "field: paymentRepository" },
+        { "type": "PaymentViewRepository", "name": "viewRepository", "fieldOrParam": "field: viewRepository" },
+        { "type": "EventStoreEntryRepository", "name": "entries", "fieldOrParam": "field: entries" },
+        { "type": "EventSerde", "name": "serde", "fieldOrParam": "field: serde" }
+      ],
+      "uses": ["PaymentDtos", "Payment", "PaymentEvent", "EventStoreEntry", "EventSerde", "PaymentView", "DomainException"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/web/RazorpayWebhookSecurityConfig.java",
+      "package": "com.samato.paymentservice.web",
+      "className": "RazorpayWebhookSecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "razorpayWebhookFilterChain", "signature": "public SecurityFilterChain razorpayWebhookFilterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean", "@Order(Ordered.HIGHEST_PRECEDENCE)"] }
+      ],
+      "injects": [
+        { "type": "HttpSecurity", "name": "http", "fieldOrParam": "razorpayWebhookFilterChain(HttpSecurity http)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/web/SecurityConfig.java",
+      "package": "com.samato.paymentservice.web",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "filterChain", "signature": "public SecurityFilterChain filterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] },
+        { "name": "jwtAuthConverter", "signature": "public Converter<Jwt, AbstractAuthenticationToken> jwtAuthConverter()", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "HttpSecurity", "name": "http", "fieldOrParam": "filterChain(HttpSecurity http)" },
+        { "type": "String (jwkSetUri via @Value)", "name": "jwkSetUri", "fieldOrParam": "jwtDecoder(String jwkSetUri)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/web/PaymentController.java",
+      "package": "com.samato.paymentservice.web",
+      "className": "PaymentController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/payments\")"],
+      "publicMethods": [
+        { "name": "createOrder", "signature": "public PaymentDtos.PaymentResponse createOrder(@AuthenticationPrincipal Jwt jwt, @RequestHeader(value = \"Idempotency-Key\", required = false) String idempotencyKey, @Valid @RequestBody PaymentDtos.CreatePaymentRequest request)", "annotations": ["@PostMapping(\"/orders\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] },
+        { "name": "get", "signature": "public PaymentDtos.PaymentResponse get(@AuthenticationPrincipal Jwt jwt, @PathVariable(\"id\") UUID id)", "annotations": ["@GetMapping(\"/{id}\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] },
+        { "name": "getByOrder", "signature": "public PaymentDtos.PaymentResponse getByOrder(@AuthenticationPrincipal Jwt jwt, @PathVariable(\"orderId\") UUID orderId)", "annotations": ["@GetMapping(\"/by-order/{orderId}\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] },
+        { "name": "listEvents", "signature": "public List<Map<String, Object>> listEvents(@AuthenticationPrincipal Jwt jwt, @PathVariable(\"id\") UUID id)", "annotations": ["@GetMapping(\"/{id}/events\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] },
+        { "name": "balanceAt", "signature": "public Map<String, Object> balanceAt(@AuthenticationPrincipal Jwt jwt, @PathVariable(\"id\") UUID id, @PathVariable(\"version\") long version)", "annotations": ["@GetMapping(\"/{id}/balance-at/{version}\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] },
+        { "name": "refund", "signature": "public PaymentDtos.PaymentResponse refund(@AuthenticationPrincipal Jwt jwt, @PathVariable(\"id\") UUID id, @RequestHeader(value = \"Idempotency-Key\", required = false) String idempotencyKey, @Valid @RequestBody PaymentDtos.RefundRequest request)", "annotations": ["@PostMapping(\"/{id}/refunds\")", "@PreAuthorize(\"hasAnyRole('CUSTOMER','ADMIN','SERVICE')\")"] }
+      ],
+      "injects": [
+        { "type": "PaymentService", "name": "paymentService", "fieldOrParam": "field: paymentService" },
+        { "type": "PaymentQueryService", "name": "queryService", "fieldOrParam": "field: queryService" }
+      ],
+      "uses": ["PaymentService", "PaymentQueryService", "PaymentDtos"]
+    },
+    {
+      "path": "services/payment-service/src/main/java/com/samato/paymentservice/web/WebhookController.java",
+      "package": "com.samato.paymentservice.web",
+      "className": "WebhookController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/payments/webhooks\")"],
+      "publicMethods": [
+        { "name": "razorpay", "signature": "public ResponseEntity<String> razorpay(@RequestHeader(value = \"X-Razorpay-Signature\", required = false) String signature, @RequestBody byte[] body)", "annotations": ["@PostMapping(\"/razorpay\")"] }
+      ],
+      "injects": [
+        { "type": "WebhookSignatureVerifier", "name": "verifier", "fieldOrParam": "field: verifier" }
+      ],
+      "uses": ["WebhookSignatureVerifier"]
+    }
+  ],
+  "migrations": [
+    { "file": "V1__init_event_store.sql", "tablesCreated": ["events", "payment_snapshots"], "tablesAltered": [] },
+    { "file": "V2__processed_commands_and_views.sql", "tablesCreated": ["processed_commands", "payment_view", "outbox_events"], "tablesAltered": [] }
+  ],
+  "endpoints": [
+    { "controllerClass": "PaymentController", "method": "POST", "path": "/api/payments/orders", "handlerMethod": "createOrder", "requestDto": "CreatePaymentRequest", "responseDto": "PaymentResponse", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "Idempotency-Key header"] },
+    { "controllerClass": "PaymentController", "method": "GET", "path": "/api/payments/{id}", "handlerMethod": "get", "requestDto": null, "responseDto": "PaymentResponse", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "owner-or-admin check at runtime"] },
+    { "controllerClass": "PaymentController", "method": "GET", "path": "/api/payments/by-order/{orderId}", "handlerMethod": "getByOrder", "requestDto": null, "responseDto": "PaymentResponse", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "owner-or-admin check at runtime"] },
+    { "controllerClass": "PaymentController", "method": "GET", "path": "/api/payments/{id}/events", "handlerMethod": "listEvents", "requestDto": null, "responseDto": "List<Map<String,Object>>", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "owner-or-admin check at runtime"] },
+    { "controllerClass": "PaymentController", "method": "GET", "path": "/api/payments/{id}/balance-at/{version}", "handlerMethod": "balanceAt", "requestDto": null, "responseDto": "Map<String,Object>", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "owner-or-admin check at runtime"] },
+    { "controllerClass": "PaymentController", "method": "POST", "path": "/api/payments/{id}/refunds", "handlerMethod": "refund", "requestDto": "RefundRequest", "responseDto": "PaymentResponse", "guards": ["hasAnyRole('CUSTOMER','ADMIN','SERVICE')", "Idempotency-Key header"] },
+    { "controllerClass": "WebhookController", "method": "POST", "path": "/api/payments/webhooks/razorpay", "handlerMethod": "razorpay", "requestDto": "byte[]", "responseDto": "ResponseEntity<String>", "guards": ["X-Razorpay-Signature HMAC verification (separate filter chain)"] }
+  ],
+  "javaFileCount": 37
+}

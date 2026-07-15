@@ -1,0 +1,267 @@
+{
+  "service": "restaurant-service",
+  "modulePath": "services/restaurant-service",
+  "files": [
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/RestaurantServiceApplication.java",
+      "package": "com.samato.restaurantservice",
+      "className": "RestaurantServiceApplication",
+      "kind": "Other",
+      "annotations": ["@SpringBootApplication", "@EnableDiscoveryClient", "@EnableCaching", "@EnableScheduling", "@ComponentScan(basePackages = {\"com.samato.restaurantservice\",\"com.samato.shared\",\"com.samato.sharedkafka\"})"],
+      "publicMethods": [
+        { "name": "main", "signature": "public static void main(String[] args)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/config/CacheConfig.java",
+      "package": "com.samato.restaurantservice.config",
+      "className": "CacheConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration"],
+      "publicMethods": [
+        { "name": "cacheManager", "signature": "public CacheManager cacheManager(RedisConnectionFactory cf)", "annotations": ["@Bean"] }
+      ],
+      "injects": [
+        { "type": "RedisConnectionFactory", "name": "cf", "fieldOrParam": "cacheManager(RedisConnectionFactory cf)" }
+      ],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/MenuItem.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "MenuItem",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"menu_items\", indexes = { @Index(name = \"idx_menu_items_restaurant\", columnList = \"restaurant_id\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getRestaurantId", "signature": "public UUID getRestaurantId()", "annotations": [] },
+        { "name": "setRestaurantId", "signature": "public void setRestaurantId(UUID restaurantId)", "annotations": [] },
+        { "name": "getName", "signature": "public String getName()", "annotations": [] },
+        { "name": "setName", "signature": "public void setName(String name)", "annotations": [] },
+        { "name": "getDescription", "signature": "public String getDescription()", "annotations": [] },
+        { "name": "setDescription", "signature": "public void setDescription(String description)", "annotations": [] },
+        { "name": "getPrice", "signature": "public BigDecimal getPrice()", "annotations": [] },
+        { "name": "setPrice", "signature": "public void setPrice(BigDecimal price)", "annotations": [] },
+        { "name": "isAvailable", "signature": "public boolean isAvailable()", "annotations": [] },
+        { "name": "setAvailable", "signature": "public void setAvailable(boolean available)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/MenuItemRepository.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "MenuItemRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByRestaurantId", "signature": "List<MenuItem> findByRestaurantId(UUID restaurantId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["MenuItem"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/OutboxEvent.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "OutboxEvent",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"outbox_events\", indexes = { @Index(name = \"idx_outbox_unsent\", columnList = \"sent_at\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "getAggregateType", "signature": "public String getAggregateType()", "annotations": [] },
+        { "name": "setAggregateType", "signature": "public void setAggregateType(String aggregateType)", "annotations": [] },
+        { "name": "getAggregateId", "signature": "public UUID getAggregateId()", "annotations": [] },
+        { "name": "setAggregateId", "signature": "public void setAggregateId(UUID aggregateId)", "annotations": [] },
+        { "name": "getTopic", "signature": "public String getTopic()", "annotations": [] },
+        { "name": "setTopic", "signature": "public void setTopic(String topic)", "annotations": [] },
+        { "name": "getEventType", "signature": "public String getEventType()", "annotations": [] },
+        { "name": "setEventType", "signature": "public void setEventType(String eventType)", "annotations": [] },
+        { "name": "getPayload", "signature": "public byte[] getPayload()", "annotations": [] },
+        { "name": "setPayload", "signature": "public void setPayload(byte[] payload)", "annotations": [] },
+        { "name": "getSentAt", "signature": "public Instant getSentAt()", "annotations": [] },
+        { "name": "setSentAt", "signature": "public void setSentAt(Instant sentAt)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/OutboxEventRepository.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "OutboxEventRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findUnsent", "signature": "List<OutboxEvent> findUnsent()", "annotations": ["@Query(\"SELECT e FROM OutboxEvent e WHERE e.sentAt IS NULL ORDER BY e.createdAt ASC LIMIT 100\")"] }
+      ],
+      "injects": [],
+      "uses": ["OutboxEvent"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/Restaurant.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "Restaurant",
+      "kind": "Entity",
+      "annotations": ["@Entity", "@Table(name = \"restaurants\", indexes = { @Index(name = \"idx_restaurants_city\", columnList = \"city\"), @Index(name = \"idx_restaurants_owner\", columnList = \"owner_id\") })"],
+      "publicMethods": [
+        { "name": "getId", "signature": "public UUID getId()", "annotations": [] },
+        { "name": "setId", "signature": "public void setId(UUID id)", "annotations": [] },
+        { "name": "getOwnerId", "signature": "public UUID getOwnerId()", "annotations": [] },
+        { "name": "setOwnerId", "signature": "public void setOwnerId(UUID ownerId)", "annotations": [] },
+        { "name": "getName", "signature": "public String getName()", "annotations": [] },
+        { "name": "setName", "signature": "public void setName(String name)", "annotations": [] },
+        { "name": "getDescription", "signature": "public String getDescription()", "annotations": [] },
+        { "name": "setDescription", "signature": "public void setDescription(String description)", "annotations": [] },
+        { "name": "getCuisine", "signature": "public String getCuisine()", "annotations": [] },
+        { "name": "setCuisine", "signature": "public void setCuisine(String cuisine)", "annotations": [] },
+        { "name": "getAddress", "signature": "public String getAddress()", "annotations": [] },
+        { "name": "setAddress", "signature": "public void setAddress(String address)", "annotations": [] },
+        { "name": "getCity", "signature": "public String getCity()", "annotations": [] },
+        { "name": "setCity", "signature": "public void setCity(String city)", "annotations": [] },
+        { "name": "getLatitude", "signature": "public double getLatitude()", "annotations": [] },
+        { "name": "setLatitude", "signature": "public void setLatitude(double latitude)", "annotations": [] },
+        { "name": "getLongitude", "signature": "public double getLongitude()", "annotations": [] },
+        { "name": "setLongitude", "signature": "public void setLongitude(double longitude)", "annotations": [] },
+        { "name": "isActive", "signature": "public boolean isActive()", "annotations": [] },
+        { "name": "setActive", "signature": "public void setActive(boolean active)", "annotations": [] },
+        { "name": "getCreatedAt", "signature": "public Instant getCreatedAt()", "annotations": [] },
+        { "name": "getUpdatedAt", "signature": "public Instant getUpdatedAt()", "annotations": [] },
+        { "name": "getVersion", "signature": "public long getVersion()", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/domain/RestaurantRepository.java",
+      "package": "com.samato.restaurantservice.domain",
+      "className": "RestaurantRepository",
+      "kind": "Repository",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "findByCityIgnoreCaseAndActiveTrue", "signature": "List<Restaurant> findByCityIgnoreCaseAndActiveTrue(String city)", "annotations": [] },
+        { "name": "findByOwnerId", "signature": "List<Restaurant> findByOwnerId(UUID ownerId)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["Restaurant"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/security/RestaurantOwnership.java",
+      "package": "com.samato.restaurantservice.security",
+      "className": "RestaurantOwnership",
+      "kind": "Component",
+      "annotations": ["@Component(\"restaurantOwnership\")"],
+      "publicMethods": [
+        { "name": "isOwner", "signature": "public boolean isOwner(UUID restaurantId, Authentication auth)", "annotations": [] }
+      ],
+      "injects": [
+        { "type": "RestaurantRepository", "name": "repo", "fieldOrParam": "field: repo" }
+      ],
+      "uses": ["Restaurant"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/security/SecurityConfig.java",
+      "package": "com.samato.restaurantservice.security",
+      "className": "SecurityConfig",
+      "kind": "Config",
+      "annotations": ["@Configuration", "@EnableMethodSecurity"],
+      "publicMethods": [
+        { "name": "filterChain", "signature": "public SecurityFilterChain filterChain(HttpSecurity http) throws Exception", "annotations": ["@Bean"] },
+        { "name": "jwtDecoder", "signature": "public JwtDecoder jwtDecoder(String jwkSetUri)", "annotations": ["@Bean"] },
+        { "name": "jwtAuthenticationConverter", "signature": "public JwtAuthenticationConverter jwtAuthenticationConverter()", "annotations": ["@Bean"] }
+      ],
+      "injects": [],
+      "uses": []
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/AvroBytes.java",
+      "package": "com.samato.restaurantservice.service",
+      "className": "AvroBytes",
+      "kind": "Other",
+      "annotations": [],
+      "publicMethods": [
+        { "name": "encode", "signature": "static byte[] encode(SpecificRecord record)", "annotations": [] },
+        { "name": "decode", "signature": "static SpecificRecord decode(String eventType, byte[] payload)", "annotations": [] }
+      ],
+      "injects": [],
+      "uses": ["RestaurantCreatedEvent", "RestaurantUpdatedEvent"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/Outbox.java",
+      "package": "com.samato.restaurantservice.service",
+      "className": "Outbox",
+      "kind": "Component",
+      "annotations": ["@Component"],
+      "publicMethods": [
+        { "name": "enqueueRestaurantCreated", "signature": "public void enqueueRestaurantCreated(Restaurant r)", "annotations": [] },
+        { "name": "enqueueRestaurantUpdated", "signature": "public void enqueueRestaurantUpdated(Restaurant r)", "annotations": [] },
+        { "name": "publishPending", "signature": "public void publishPending()", "annotations": ["@Scheduled(fixedDelay = 1000L)", "@Transactional"] }
+      ],
+      "injects": [
+        { "type": "OutboxEventRepository", "name": "outboxRepo", "fieldOrParam": "field: outboxRepo" },
+        { "type": "KafkaTemplate<String, SpecificRecord>", "name": "kafkaTemplate", "fieldOrParam": "field: kafkaTemplate" }
+      ],
+      "uses": ["Restaurant", "OutboxEvent", "RestaurantCreatedEvent", "RestaurantUpdatedEvent", "AvroBytes"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/service/RestaurantService.java",
+      "package": "com.samato.restaurantservice.service",
+      "className": "RestaurantService",
+      "kind": "Service",
+      "annotations": ["@Service"],
+      "publicMethods": [
+        { "name": "get", "signature": "public Restaurant get(UUID id)", "annotations": ["@Cacheable(value = CACHE, key = \"#id\")", "@Transactional(readOnly = true)"] },
+        { "name": "findByCity", "signature": "public List<Restaurant> findByCity(String city)", "annotations": ["@Transactional(readOnly = true)"] },
+        { "name": "findByOwner", "signature": "public List<Restaurant> findByOwner(UUID ownerId)", "annotations": ["@Transactional(readOnly = true)"] },
+        { "name": "getMenu", "signature": "public List<MenuItem> getMenu(UUID restaurantId)", "annotations": ["@Transactional(readOnly = true)"] },
+        { "name": "create", "signature": "public Restaurant create(UUID ownerId, Restaurant draft)", "annotations": ["@Caching(evict = { @CacheEvict(value = CACHE, key = \"#result.id\") })", "@Transactional"] },
+        { "name": "update", "signature": "public Restaurant update(UUID id, Restaurant patch)", "annotations": ["@Caching(evict = { @CacheEvict(value = CACHE, key = \"#id\") })", "@Transactional"] },
+        { "name": "deactivate", "signature": "public void deactivate(UUID id)", "annotations": ["@Caching(evict = { @CacheEvict(value = CACHE, key = \"#id\") })", "@Transactional"] },
+        { "name": "addMenuItem", "signature": "public MenuItem addMenuItem(UUID restaurantId, MenuItem item)", "annotations": ["@Transactional"] }
+      ],
+      "injects": [
+        { "type": "RestaurantRepository", "name": "restaurants", "fieldOrParam": "field: restaurants" },
+        { "type": "MenuItemRepository", "name": "menuItems", "fieldOrParam": "field: menuItems" },
+        { "type": "Outbox", "name": "outbox", "fieldOrParam": "field: outbox" }
+      ],
+      "uses": ["Restaurant", "MenuItem", "Outbox", "DomainException"]
+    },
+    {
+      "path": "services/restaurant-service/src/main/java/com/samato/restaurantservice/web/RestaurantController.java",
+      "package": "com.samato.restaurantservice.web",
+      "className": "RestaurantController",
+      "kind": "Controller",
+      "annotations": ["@RestController", "@RequestMapping(\"/api/restaurants\")"],
+      "publicMethods": [
+        { "name": "get", "signature": "public Restaurant get(@PathVariable UUID id)", "annotations": ["@GetMapping(\"/{id}\")", "@PreAuthorize(\"isAuthenticated()\")"] },
+        { "name": "findByCity", "signature": "public List<Restaurant> findByCity(@RequestParam String city)", "annotations": ["@GetMapping(params = \"city\")", "@PreAuthorize(\"isAuthenticated()\")"] },
+        { "name": "getMenu", "signature": "public List<MenuItem> getMenu(@PathVariable UUID id)", "annotations": ["@GetMapping(\"/{id}/menu\")", "@PreAuthorize(\"isAuthenticated()\")"] },
+        { "name": "create", "signature": "public Restaurant create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateRestaurantRequest req)", "annotations": ["@PostMapping", "@ResponseStatus(HttpStatus.CREATED)", "@PreAuthorize(\"hasRole('RESTAURANT_OWNER')\")"] },
+        { "name": "update", "signature": "public Restaurant update(@PathVariable UUID id, @Valid @RequestBody UpdateRestaurantRequest req)", "annotations": ["@PutMapping(\"/{id}\")", "@PreAuthorize(\"hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)\")"] },
+        { "name": "deactivate", "signature": "public void deactivate(@PathVariable UUID id)", "annotations": ["@DeleteMapping(\"/{id}\")", "@ResponseStatus(HttpStatus.NO_CONTENT)", "@PreAuthorize(\"hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)\")"] },
+        { "name": "addMenuItem", "signature": "public MenuItem addMenuItem(@PathVariable UUID id, @Valid @RequestBody CreateMenuItemRequest req)", "annotations": ["@PostMapping(\"/{id}/menu\")", "@ResponseStatus(HttpStatus.CREATED)", "@PreAuthorize(\"hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)\")"] }
+      ],
+      "injects": [
+        { "type": "RestaurantService", "name": "service", "fieldOrParam": "field: service" }
+      ],
+      "uses": ["RestaurantService", "Restaurant", "MenuItem", "CreateRestaurantRequest", "UpdateRestaurantRequest", "CreateMenuItemRequest"]
+    }
+  ],
+  "migrations": [
+    { "file": "V1__init.sql", "tablesCreated": ["restaurants", "menu_items", "outbox_events"], "tablesAltered": [] }
+  ],
+  "endpoints": [
+    { "controllerClass": "RestaurantController", "method": "GET", "path": "/api/restaurants/{id}", "handlerMethod": "get", "requestDto": null, "responseDto": "Restaurant", "guards": ["isAuthenticated()"] },
+    { "controllerClass": "RestaurantController", "method": "GET", "path": "/api/restaurants?city={city}", "handlerMethod": "findByCity", "requestDto": null, "responseDto": "List<Restaurant>", "guards": ["isAuthenticated()"] },
+    { "controllerClass": "RestaurantController", "method": "GET", "path": "/api/restaurants/{id}/menu", "handlerMethod": "getMenu", "requestDto": null, "responseDto": "List<MenuItem>", "guards": ["isAuthenticated()"] },
+    { "controllerClass": "RestaurantController", "method": "POST", "path": "/api/restaurants", "handlerMethod": "create", "requestDto": "CreateRestaurantRequest", "responseDto": "Restaurant", "guards": ["hasRole('RESTAURANT_OWNER')"] },
+    { "controllerClass": "RestaurantController", "method": "PUT", "path": "/api/restaurants/{id}", "handlerMethod": "update", "requestDto": "UpdateRestaurantRequest", "responseDto": "Restaurant", "guards": ["hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)"] },
+    { "controllerClass": "RestaurantController", "method": "DELETE", "path": "/api/restaurants/{id}", "handlerMethod": "deactivate", "requestDto": null, "responseDto": "void", "guards": ["hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)"] },
+    { "controllerClass": "RestaurantController", "method": "POST", "path": "/api/restaurants/{id}/menu", "handlerMethod": "addMenuItem", "requestDto": "CreateMenuItemRequest", "responseDto": "MenuItem", "guards": ["hasRole('ADMIN') or @restaurantOwnership.isOwner(#id, authentication)"] }
+  ],
+  "javaFileCount": 14
+}
